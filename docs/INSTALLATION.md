@@ -31,7 +31,8 @@ Run these files in the Supabase SQL editor, in order:
 4. `db/004_pixels_media_library.sql`
 5. `db/005_organization_profile.sql`
 6. `db/006_activity_and_tasks.sql`
-7. `db/storage_policies.sql` after creating the buckets described in `db/storage.md`
+7. `db/007_api_identity_rls.sql`
+8. `db/storage_policies.sql` after creating the buckets described in `db/storage.md`
 
 Database migrations must be run with the project owner/migration connection. The runtime API switches to the restricted `serviceup_api` role for tenant requests.
 
@@ -42,6 +43,11 @@ Configure `ADMIN_EMAIL` and `ADMIN_PASSWORD`, then run:
 ```bash
 npm run seed --prefix api
 ```
+
+Run that command from the repository root. If the terminal is already inside
+`api/`, use `npm run seed` instead. The seed is safe to rerun: it repairs the
+administrator password and active tenant membership, and creates/links the
+matching Supabase Auth identity required for Storage uploads.
 
 For shared mode, list the same email under `SERVICEUP_PLATFORM_ADMINS`.
 
@@ -77,7 +83,7 @@ The administrator must already exist as a ServiceUp/Supabase user. Register both
 - Root directory: `api`
 - Build command: `npm ci`
 - Start command: `npm start`
-- Health check: `/health`
+- Health check: `/api/health`
 
 ### Netlify dashboard
 

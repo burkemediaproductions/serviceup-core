@@ -15,6 +15,17 @@ test('tenant migrations cover Profile and Pixels', () => {
   const migration = read('db/002_multitenancy.sql');
   assert.match(migration, /'pixels'/); assert.match(migration, /'organization_profiles'/);
 });
+test('trusted API role can read global identity and tenant lookup tables', () => {
+  const migration = read('db/007_api_identity_rls.sql');
+  assert.match(migration, /create policy serviceup_api_access on public\.users/i);
+  assert.match(migration, /create policy serviceup_api_access on public\.tenants/i);
+});
+test('administrator seed repairs passwords and links Supabase Auth', () => {
+  const seed = read('api/seed.js');
+  assert.match(seed, /password_hash = excluded\.password_hash/);
+  assert.match(seed, /supabaseAdmin\.auth\.admin\.createUser/);
+  assert.match(seed, /supabase_id = coalesce/);
+});
 test('public Profile explicitly filters private items', () => {
   assert.match(read('api/routes/profile.js'), /item\.is_public !== false/);
 });
