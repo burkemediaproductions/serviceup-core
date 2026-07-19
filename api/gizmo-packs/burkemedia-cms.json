@@ -1,0 +1,13 @@
+{
+  "pack_slug": "burkemedia-cms",
+  "name": "BurkeMedia CMS Starter",
+  "description": "Structured public content for BurkeMedia.pro and future ServiceUp content.",
+  "gadget": { "gadget_type": "cms", "description": "BurkeMedia CMS starter", "design_config": {}, "structure_config": {}, "is_active": true, "is_system": false },
+  "gizmos": [], "gadget_gizmos": [],
+  "content_types": [
+    { "name": "Blog Post", "slug": "blog-posts", "fields": [ { "field_key": "title", "type": "text", "label": "Title", "required": true, "order_index": 1 }, { "field_key": "summary", "type": "textarea", "label": "Summary", "order_index": 2 }, { "field_key": "body", "type": "richtext", "label": "Article", "order_index": 3 }, { "field_key": "featured_image", "type": "image", "label": "Featured Pixel", "order_index": 4 }, { "field_key": "seo_title", "type": "text", "label": "SEO title", "order_index": 5 }, { "field_key": "seo_description", "type": "textarea", "label": "SEO description", "order_index": 6 } ] },
+    { "name": "Case Study", "slug": "case-studies", "fields": [ { "field_key": "title", "type": "text", "label": "Title", "required": true, "order_index": 1 }, { "field_key": "client", "type": "relationship", "label": "Client", "order_index": 2, "config": { "content_type": "clients" } }, { "field_key": "summary", "type": "textarea", "label": "Summary", "order_index": 3 }, { "field_key": "services", "type": "relationship", "label": "Services", "order_index": 4, "config": { "content_type": "services", "multiple": true } }, { "field_key": "body", "type": "richtext", "label": "Story", "order_index": 5 }, { "field_key": "featured_image", "type": "image", "label": "Featured Pixel", "order_index": 6 } ] },
+    { "name": "Service", "slug": "services", "fields": [ { "field_key": "name", "type": "text", "label": "Service", "required": true, "order_index": 1 }, { "field_key": "short_description", "type": "textarea", "label": "Short description", "order_index": 2 }, { "field_key": "body", "type": "richtext", "label": "Full description", "order_index": 3 }, { "field_key": "starting_price", "type": "currency", "label": "Starting price", "order_index": 4 }, { "field_key": "image", "type": "image", "label": "Pixel", "order_index": 5 } ] },
+    { "name": "Testimonial", "slug": "testimonials", "fields": [ { "field_key": "quote", "type": "textarea", "label": "Testimonial", "required": true, "order_index": 1 }, { "field_key": "name", "type": "text", "label": "Name", "order_index": 2 }, { "field_key": "organization", "type": "text", "label": "Organization", "order_index": 3 }, { "field_key": "photo", "type": "image", "label": "Photo Pixel", "order_index": 4 } ] }
+  ], "entries": []
+}

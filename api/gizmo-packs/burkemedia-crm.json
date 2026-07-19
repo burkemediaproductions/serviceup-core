@@ -1,0 +1,24 @@
+{
+  "pack_slug": "burkemedia-crm",
+  "name": "BurkeMedia CRM Starter",
+  "description": "Clients, contacts, leads, projects and tasks for the BurkeMedia pilot.",
+  "gadget": { "gadget_type": "crm", "description": "BurkeMedia CRM starter", "design_config": {}, "structure_config": {}, "is_active": true, "is_system": false },
+  "gizmos": [], "gadget_gizmos": [],
+  "content_types": [
+    { "name": "Client", "slug": "clients", "description": "Organizations served by BurkeMedia", "fields": [
+      { "field_key": "name", "type": "text", "label": "Client name", "required": true, "order_index": 1 }, { "field_key": "status", "type": "select", "label": "Status", "order_index": 2, "config": { "options": ["Lead", "Active", "Paused", "Former"] } }, { "field_key": "website", "type": "url", "label": "Website", "order_index": 3 }, { "field_key": "industry", "type": "text", "label": "Industry", "order_index": 4 }, { "field_key": "notes", "type": "richtext", "label": "Notes", "order_index": 5 }
+    ]},
+    { "name": "Contact", "slug": "contacts", "description": "People connected to clients and projects", "fields": [
+      { "field_key": "name", "type": "name", "label": "Name", "required": true, "order_index": 1 }, { "field_key": "email", "type": "email", "label": "Email", "order_index": 2 }, { "field_key": "phone", "type": "phone", "label": "Phone", "order_index": 3 }, { "field_key": "client", "type": "relationship", "label": "Client", "order_index": 4, "config": { "content_type": "clients" } }, { "field_key": "title", "type": "text", "label": "Title/role", "order_index": 5 }
+    ]},
+    { "name": "Lead", "slug": "leads", "description": "Prospective work and inquiries", "fields": [
+      { "field_key": "name", "type": "text", "label": "Lead", "required": true, "order_index": 1 }, { "field_key": "status", "type": "select", "label": "Status", "order_index": 2, "config": { "options": ["New", "Contacted", "Qualified", "Proposal", "Won", "Lost"] } }, { "field_key": "source", "type": "text", "label": "Source", "order_index": 3 }, { "field_key": "estimated_value", "type": "currency", "label": "Estimated value", "order_index": 4 }, { "field_key": "follow_up", "type": "datetime", "label": "Follow-up", "order_index": 5 }
+    ]},
+    { "name": "Project", "slug": "projects", "description": "Client work and deliverables", "fields": [
+      { "field_key": "name", "type": "text", "label": "Project name", "required": true, "order_index": 1 }, { "field_key": "client", "type": "relationship", "label": "Client", "order_index": 2, "config": { "content_type": "clients" } }, { "field_key": "status", "type": "select", "label": "Status", "order_index": 3, "config": { "options": ["Planned", "Active", "Waiting", "Complete", "Archived"] } }, { "field_key": "due_date", "type": "date", "label": "Due date", "order_index": 4 }, { "field_key": "value", "type": "currency", "label": "Project value", "order_index": 5 }
+    ]},
+    { "name": "Task", "slug": "tasks", "description": "Work and follow-ups", "fields": [
+      { "field_key": "title", "type": "text", "label": "Task", "required": true, "order_index": 1 }, { "field_key": "status", "type": "select", "label": "Status", "order_index": 2, "config": { "options": ["Open", "In Progress", "Waiting", "Done"] } }, { "field_key": "due_at", "type": "datetime", "label": "Due", "order_index": 3 }, { "field_key": "assigned_to", "type": "user", "label": "Assigned to", "order_index": 4 }, { "field_key": "project", "type": "relationship", "label": "Project", "order_index": 5, "config": { "content_type": "projects" } }
+    ]}
+  ], "entries": []
+}

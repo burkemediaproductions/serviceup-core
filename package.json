@@ -1,0 +1,18 @@
+{
+  "name": "serviceup",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install:all": "npm ci --prefix api && npm ci --prefix dashboard",
+    "dev:dashboard": "npm run dev --prefix dashboard",
+    "dev:admin": "npm run dev:dashboard",
+    "dev:api": "npm run dev --prefix api",
+    "build": "npm run build --prefix dashboard",
+    "start": "npm start --prefix api",
+    "doctor": "npm run doctor --prefix api",
+    "tenant:create": "npm run tenant:create --prefix api --",
+    "migrate": "npm run migrate --prefix api --",
+    "test": "npm test --prefix api",
+    "check": "npm run check --prefix api && npm test --prefix api && npm run build --prefix dashboard"
+  }
+}
