@@ -34,6 +34,15 @@ async function seed() {
       supabaseId = data?.user?.id || null;
     }
 
+    if (supabaseId && supabaseAdmin) {
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(supabaseId, {
+        email,
+        password,
+        email_confirm: true,
+      });
+      if (error) throw new Error(`Unable to synchronize Supabase Auth administrator: ${error.message}`);
+    }
+
     if (!supabaseId) {
       console.warn(
         'Seeded the ServiceUp administrator without Supabase Auth; Storage uploads will remain unavailable until the identities are linked.',

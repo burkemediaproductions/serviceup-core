@@ -37,6 +37,7 @@ Useful root commands:
 ServiceUp supports shared and dedicated infrastructure from the same codebase. See `docs/TENANCY.md` for the full model and deployment settings.
 Use `docs/INSTALLATION.md` as the canonical setup and production-acceptance checklist.
 See `docs/BRANDING.md`, `docs/PROFILE.md`, and `docs/BURKEMEDIA_STARTERS.md` for the first pilot-facing systems.
+See `docs/PANELS.md` for template-aware website sections and their public data shape.
 See `docs/PROVIDER_ROADMAP.md` for the planned generic PostgreSQL, Netlify Database, and MySQL provider architecture after the Supabase pilot.
 
 Each installation should receive its own environment configuration, tenant/default settings, branding, users, roles, and enabled gizmo packs. Keep secrets in environment variables and never commit `.env` files.
@@ -55,7 +56,7 @@ Avoid placing application code at the repository root or outside the canonical `
 
 ServiceUp is intended to remain a unified CRM/CMS backend and management dashboard that can serve multiple websites and apps. It should not become a separate custom application for every client. Client needs that are broadly reusable belong in the core; vendor- or client-specific connections belong in gizmos; configuration belongs in data and environment settings.
 
-Terminology is intentionally narrow: **Widgets** are small dashboard components, **Gizmos** are capabilities or integrations, **Gadgets** are installable solutions/module packs, and **Pixels** are media assets. **Profile** is the conventional Organization Profile holding reusable contact and identity details. Website heroes, calls to action, testimonials, and other editable sections are ordinary Content types and entries—not Widgets.
+Terminology is intentionally narrow: **Widgets** are small dashboard components, **Gizmos** are capabilities or integrations, **Gadgets** are installable solutions/module packs, **Pixels** are media assets, and **Panels** are typed website sections arranged through Page Templates. **Profile** is the conventional Organization Profile holding reusable contact and identity details. Website heroes, calls to action, testimonials, and other editable sections use Panels or ordinary related Content entries—not Widgets.
 
 ## Known follow-up work
 

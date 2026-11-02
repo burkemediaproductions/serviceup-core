@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { deleteFromSupabase, getSignedUrl, uploadToSupabase } from '../../lib/storage';
+import { supabase } from '../../lib/supabaseClient';
 
 function formatBytes(value) {
   const bytes = Number(value || 0);
@@ -68,6 +69,14 @@ export default function PixelsPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data?.session) {
+        setMessage('Pixels needs a Storage session. Sign out and sign back in once to connect it.');
+      }
+    }).catch(() => {});
+  }, []);
 
   const load = async () => {
     try {

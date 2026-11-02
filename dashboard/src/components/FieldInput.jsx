@@ -1,6 +1,7 @@
 // admin/src/components/FieldInput.jsx
 import React, { useState, useMemo, useEffect } from "react";
 import RichTextEditor from "./RichTextEditor";
+import RichTextContent, { isRichTextDocument, richTextToPlainText } from "./RichTextContent";
 import { DateTime } from "luxon";
 import {
   combineDateAndTimeToUTC,
@@ -1805,6 +1806,174 @@ function RepeaterField({
   );
 }
 
+function makePanel(type) {
+  return {
+    id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `panel-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    type,
+    data: {},
+  };
+}
+
+function normalizePanelsValue(value) {
+  if (Array.isArray(value)) return { template: "", panels: value };
+  if (value && typeof value === "object") {
+    return {
+      template: String(value.template || ""),
+      panels: Array.isArray(value.panels) ? value.panels : [],
+    };
+  }
+  return { template: "", panels: [] };
+}
+
+function PanelsField({ field, value, onChange, entryContext, resolved, relatedCache, choicesCache }) {
+  const cfg = getFieldConfig(field);
+  const definitions = Array.isArray(cfg.definitions) ? cfg.definitions : [];
+  const templates = Array.isArray(cfg.templates) ? cfg.templates : [];
+  const current = normalizePanelsValue(value);
+  const selectedTemplate = templates.find((t) => String(t?.key) === current.template) || null;
+  const fixed = !!selectedTemplate?.fixed;
+  const allowedKeys = Array.isArray(selectedTemplate?.allowed) && selectedTemplate.allowed.length
+    ? selectedTemplate.allowed.map(String)
+    : definitions.map((d) => String(d?.key || ""));
+  const allowedDefinitions = definitions.filter((d) => allowedKeys.includes(String(d?.key || "")));
+  const [addType, setAddType] = useState(allowedDefinitions[0]?.key || "");
+  const [collapsed, setCollapsed] = useState({});
+
+  useEffect(() => {
+    if (!allowedDefinitions.some((d) => d.key === addType)) setAddType(allowedDefinitions[0]?.key || "");
+  }, [current.template, definitions.length]);
+
+  function save(nextPanels, template = current.template) {
+    onChange({ template, panels: nextPanels });
+  }
+
+  function chooseTemplate(templateKey) {
+    const nextTemplate = templates.find((t) => String(t?.key) === templateKey) || null;
+    let nextPanels = current.panels;
+    if (nextTemplate?.fixed && Array.isArray(nextTemplate.slots)) {
+      nextPanels = nextTemplate.slots.map((type, i) => {
+        const existing = current.panels[i];
+        return existing?.type === type ? existing : makePanel(type);
+      });
+    } else if (!nextPanels.length && Array.isArray(nextTemplate?.defaults)) {
+      nextPanels = nextTemplate.defaults.map(makePanel);
+    }
+    save(nextPanels, templateKey);
+  }
+
+  function updatePanel(index, patch) {
+    const next = [...current.panels];
+    next[index] = { ...next[index], ...patch };
+    save(next);
+  }
+
+  function move(index, direction) {
+    const target = index + direction;
+    if (target < 0 || target >= current.panels.length) return;
+    const next = [...current.panels];
+    [next[index], next[target]] = [next[target], next[index]];
+    save(next);
+  }
+
+  return (
+    <div className="su-panels-editor">
+      {templates.length > 0 && <label className="su-panels-template">
+        <span>Page template</span>
+        <select className="su-select" value={current.template} onChange={(e) => chooseTemplate(e.target.value)}>
+          <option value="">Choose a template…</option>
+          {templates.map((template) => <option key={template.key} value={template.key}>{template.label || template.key}</option>)}
+        </select>
+        {selectedTemplate?.description && <small>{selectedTemplate.description}</small>}
+      </label>}
+
+      {!definitions.length && <div className="su-alert su-alert-danger">No Panel definitions are configured for this content type.</div>}
+
+      <div className="su-panels-list">
+        {current.panels.map((panel, index) => {
+          const definition = definitions.find((d) => String(d?.key) === String(panel?.type));
+          const isCollapsed = !!collapsed[panel.id || index];
+          return <section className="su-panel-card" key={panel.id || index}>
+            <header className="su-panel-card-header">
+              <button type="button" className="su-panel-title" onClick={() => setCollapsed((prev) => ({ ...prev, [panel.id || index]: !isCollapsed }))}>
+                <span className="su-panel-number">{index + 1}</span>
+                <span>{definition?.label || panel.type || "Unknown Panel"}</span>
+                <span aria-hidden="true">{isCollapsed ? "▸" : "▾"}</span>
+              </button>
+              {!fixed && <div className="su-panel-actions">
+                <button type="button" className="su-btn" onClick={() => move(index, -1)} disabled={index === 0}>↑</button>
+                <button type="button" className="su-btn" onClick={() => move(index, 1)} disabled={index === current.panels.length - 1}>↓</button>
+                <button type="button" className="su-btn" onClick={() => {
+                  const next = [...current.panels];
+                  next.splice(index + 1, 0, { ...JSON.parse(JSON.stringify(panel)), id: makePanel(panel.type).id });
+                  save(next);
+                }}>Duplicate</button>
+                <button type="button" className="su-btn" onClick={() => save(current.panels.filter((_, i) => i !== index))}>Remove</button>
+              </div>}
+            </header>
+            {!isCollapsed && <div className="su-panel-card-body">
+              {definition?.description && <p className="su-text-sm su-text-muted">{definition.description}</p>}
+              {(definition?.fields || []).map((subfield) => {
+                const key = String(subfield?.field_key || subfield?.key || "");
+                if (!key) return null;
+                return <div className="su-panel-field" key={key}>
+                  <label>{subfield.label || key}{subfield.required ? " *" : ""}</label>
+                  <FieldInput
+                    field={{ ...subfield, key }}
+                    value={panel?.data?.[key]}
+                    onChange={(nextValue) => updatePanel(index, { data: { ...(panel.data || {}), [key]: nextValue } })}
+                    entryContext={entryContext}
+                    resolved={resolved}
+                    relatedCache={relatedCache}
+                    choicesCache={choicesCache}
+                  />
+                  {subfield.help_text && <small>{subfield.help_text}</small>}
+                </div>;
+              })}
+            </div>}
+          </section>;
+        })}
+      </div>
+
+      {!fixed && definitions.length > 0 && <div className="su-panels-add">
+        <select className="su-select" value={addType} onChange={(e) => setAddType(e.target.value)}>
+          {allowedDefinitions.map((definition) => <option key={definition.key} value={definition.key}>{definition.label || definition.key}</option>)}
+        </select>
+        <button type="button" className="su-btn primary" disabled={!addType} onClick={() => save([...current.panels, makePanel(addType)])}>
+          + {cfg.addLabel || "Add Panel"}
+        </button>
+      </div>}
+      {fixed && <p className="su-text-xs su-text-muted">This template has a fixed Panel structure. Content can be edited, but Panels cannot be added, removed, or rearranged.</p>}
+    </div>
+  );
+}
+
+export function PanelsPreview({ field, value }) {
+  const cfg = getFieldConfig(field);
+  const definitions = Array.isArray(cfg.definitions) ? cfg.definitions : [];
+  const current = normalizePanelsValue(value);
+  if (!current.panels.length) return <span className="su-text-muted">No Panels yet.</span>;
+  return <div className="su-panels-preview">
+    {current.panels.map((panel, index) => {
+      const definition = definitions.find((d) => String(d?.key) === String(panel?.type));
+      return <section key={panel.id || index} className="su-panel-preview-card">
+        <div className="su-panel-preview-label">{definition?.label || panel.type}</div>
+        <div className="su-panel-preview-fields">
+          {(definition?.fields || []).map((subfield) => {
+            const key = String(subfield?.field_key || subfield?.key || "");
+            const v = panel?.data?.[key];
+            if (v == null || v === "") return null;
+            if (isRichTextDocument(v)) return <RichTextContent key={key} value={v} />;
+            const imageUrl = subfield.type === "image" && typeof v === "object" ? (v.url || v.public_url || v.src) : "";
+            if (imageUrl) return <img key={key} src={imageUrl} alt={v.alt || ""} className="su-panel-preview-image" />;
+            if (typeof v === "object") return null;
+            return <div key={key}><strong>{subfield.label || key}:</strong> {String(v)}</div>;
+          })}
+        </div>
+      </section>;
+    })}
+  </div>;
+}
+
 /** ------------------------------------------------------------------ */
 /** LIST / WIDGET DISPLAY HELPER                                        */
 /** ------------------------------------------------------------------ */
@@ -1831,6 +2000,18 @@ export function formatFieldValueForList(fieldDef, rawValue, opts = {}) {
     (typeof v === "object" && !Array.isArray(v) && Object.keys(v).length === 0);
 
   if (empty(rawValue)) return "";
+
+  if (type === "panels") {
+    const normalized = normalizePanelsValue(rawValue);
+    const definitions = Array.isArray(cfg.definitions) ? cfg.definitions : [];
+    const labels = normalized.panels.slice(0, labelLimit).map((panel) => {
+      const definition = definitions.find((d) => String(d?.key) === String(panel?.type));
+      const heading = panel?.data?.heading;
+      return heading ? `${definition?.label || panel.type}: ${heading}` : (definition?.label || panel.type || "Panel");
+    });
+    const more = normalized.panels.length - labels.length;
+    return `${normalized.template ? `${normalized.template} · ` : ""}${labels.join(" | ")}${more > 0 ? ` | +${more} more` : ""}`;
+  }
 
   // --- Repeaters ---
   if (type === "repeater") {
@@ -2547,6 +2728,20 @@ export default function FieldInput({
     );
   }
 
+  if (fieldType === "panels") {
+    return (
+      <PanelsField
+        field={field}
+        value={value}
+        onChange={onChange}
+        entryContext={entryContext}
+        resolved={resolved}
+        relatedCache={relatedCache}
+        choicesCache={choicesCache}
+      />
+    );
+  }
+
   // ---- Dynamic choice helpers ----
   const isChoice = ["radio", "dropdown", "checkbox", "select", "multiselect"].includes(fieldType);
   const isDynamic =
@@ -2748,7 +2943,7 @@ export default function FieldInput({
 
   // ---- Advanced ----
   if (fieldType === "rich_text") {
-    return <RichTextEditor value={value} onChange={onChange} options={{ headings: [1, 2, 3, 4] }} />;
+    return <RichTextEditor value={value} onChange={onChange} options={{ headings: [1, 2, 3, 4], large: !!field?.editor_large }} />;
   }
 
   if (fieldType === "time") {

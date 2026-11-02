@@ -16,12 +16,13 @@ const canSee = (itemRoles, role) => {
  * filter items based on allowed roles.
  */
 export default function Topbar({ onToggleSidebar, isSidebarOpen, role = 'VIEWER' }) {
-  const { settings } = useSettings();
+  const { settings, themeMode, cycleThemeMode, enabledThemeModes } = useSettings();
   const [openIndex, setOpenIndex] = useState(null);
 
   const items = Array.isArray(settings?.navTopbarButtons)
     ? settings.navTopbarButtons
     : [];
+  const topbarLogo = settings?.topbarLogoUrl || settings?.logoUrl;
 
   const handleToggle = (index) => {
     setOpenIndex((prev) => (prev === index ? null : index));
@@ -45,7 +46,8 @@ export default function Topbar({ onToggleSidebar, isSidebarOpen, role = 'VIEWER'
           </button>
         )}
         <div className="su-topbar-title">
-          {settings?.appName || 'ServiceUp Admin'}
+          {settings?.showTopbarLogo !== false && topbarLogo && <img className="su-brand-logo su-brand-logo--topbar" src={topbarLogo} alt="" />}
+          {settings?.showTopbarTitle !== false && <span>{settings?.appName || settings?.app_name || 'ServiceUp Admin'}</span>}
         </div>
       </div>
       <nav className="su-topbar-nav" aria-label="Top navigation">
@@ -124,6 +126,18 @@ export default function Topbar({ onToggleSidebar, isSidebarOpen, role = 'VIEWER'
               </div>
             );
           })}
+        {settings?.theme?.allowUserToggle !== false && enabledThemeModes.length > 1 && (
+          <button
+            type="button"
+            className="su-btn su-theme-toggle"
+            onClick={cycleThemeMode}
+            title={`Current mode: ${themeMode}. Switch appearance.`}
+            aria-label={`Current appearance is ${themeMode}. Switch appearance.`}
+          >
+            <span aria-hidden="true">{themeMode === 'dark' ? '☾' : themeMode === 'reading' ? 'Aa' : '☀'}</span>
+            <span className="su-theme-toggle-label">{themeMode}</span>
+          </button>
+        )}
       </nav>
     </header>
   );

@@ -5,6 +5,7 @@ import Footer from '../components/Footer';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import { getThemeBackgroundVideo } from '../lib/branding';
 
 /**
  * AdminLayout wraps all admin pages in a consistent layout with a sidebar,
@@ -19,7 +20,7 @@ import { supabase } from '../lib/supabaseClient';
 export default function AdminLayout({ children, role }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const { settings } = useSettings();
+  const { settings, themeMode } = useSettings();
   const { user, logout } = useAuth();
   const effectiveRole = String(role || user?.role || 'VIEWER').toUpperCase();
   const hideChrome = settings?.hideChromeByRole?.[effectiveRole];
@@ -67,6 +68,15 @@ export default function AdminLayout({ children, role }) {
 
   return (
     <div className={`su-layout${collapsed ? ' collapsed' : ''}`}>
+      <div className="su-brand-background" aria-hidden="true">
+        {getThemeBackgroundVideo(settings, themeMode) && (
+          <video key={`${themeMode}-${getThemeBackgroundVideo(settings, themeMode)}`} autoPlay muted loop playsInline>
+            <source src={getThemeBackgroundVideo(settings, themeMode)} />
+          </video>
+        )}
+        <div className="su-brand-background-image" />
+        <div className="su-brand-background-overlay" />
+      </div>
       <Sidebar onClose={closeSidebar} role={effectiveRole} onLogout={handleLogout} />
       <Topbar
         onToggleSidebar={() => setSidebarOpen((v) => !v)}

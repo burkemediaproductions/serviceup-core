@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -10,6 +10,7 @@ function deepEqual(a, b) {
 }
 
 export default function RichTextEditor({ value, onChange, options }) {
+  const [fullscreen, setFullscreen] = useState(false)
   const allowedHeadings = (options?.headings ?? [1,2,3,4]).filter(l => l >= 1 && l <= 6)
 
   const initialDoc = (value && typeof value === 'object')
@@ -76,8 +77,8 @@ export default function RichTextEditor({ value, onChange, options }) {
   )
 
   return (
-    <div style={{ display: 'grid', gap: 8 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+    <div className={`su-rich-editor${fullscreen ? ' su-rich-editor--fullscreen' : ''}${options?.large ? ' su-rich-editor--large' : ''}`}>
+      <div className="su-rich-editor-toolbar">
         {allowedHeadings.map(l => (
           <Btn key={l}
             on={() => editor.chain().focus().toggleHeading({ level: l }).run()}
@@ -98,6 +99,7 @@ export default function RichTextEditor({ value, onChange, options }) {
         <Btn on={() => editor.chain().focus().undo().run()}>Undo</Btn>
         <Btn on={() => editor.chain().focus().redo().run()}>Redo</Btn>
         <Btn on={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}>Clear</Btn>
+        <Btn on={() => setFullscreen((open) => !open)}>{fullscreen ? 'Exit full screen' : 'Full screen'}</Btn>
       </div>
 
       <div className="tiptap-editor-surface">

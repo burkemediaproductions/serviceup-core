@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool } from './dbPool.js';
+import { supabaseAdmin } from './lib/supabaseAdmin.js';
 import {
   resolveTenant,
   tenantDatabaseSession,
@@ -18,6 +19,7 @@ import settingsRouter from './routes/settings.js';
 import dashboardRouter from './routes/dashboard.js';
 import contentTypesRouter from './routes/contentTypes.js';
 import entryViewsRouter from './routes/entryViews.js';
+import menusRouter from './routes/menus.js';
 import listViewsRouter from './routes/listViews.js';
 
 import gizmosRouter from './routes/gizmos.js';
@@ -444,6 +446,51 @@ app.use(resolveTenant);
 app.use(tenantDatabaseSession);
 
 
+async function syncSupabaseStorageIdentity(db, user, password) {
+  if (!supabaseAdmin) return false;
+  try {
+    let supabaseId = user.supabase_id || null;
+
+    if (!supabaseId) {
+      const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+      if (error) throw error;
+      supabaseId = data?.users?.find(
+        (candidate) => String(candidate.email || '').toLowerCase() === String(user.email || '').toLowerCase()
+      )?.id || null;
+    }
+
+    if (supabaseId) {
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(supabaseId, {
+        email: user.email,
+        password,
+        email_confirm: true,
+      });
+      if (error) throw error;
+    } else {
+      const { data, error } = await supabaseAdmin.auth.admin.createUser({
+        email: user.email,
+        password,
+        email_confirm: true,
+      });
+      if (error) throw error;
+      supabaseId = data?.user?.id || null;
+    }
+
+    if (!supabaseId) return false;
+    if (supabaseId !== user.supabase_id) {
+      await db.query('update public.users set supabase_id = $1, updated_at = now() where id = $2', [
+        supabaseId,
+        user.id,
+      ]);
+    }
+    return true;
+  } catch (error) {
+    console.warn('[auth/login] Supabase Storage identity sync failed:', error?.message || error);
+    return false;
+  }
+}
+
+
 /* ----------------------- Auth -------------------------------------- */
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
@@ -467,6 +514,11 @@ app.post('/api/auth/login', async (req, res) => {
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
 
+    // Keep the matching Supabase Auth identity in sync with the password that
+    // just successfully authenticated to ServiceUp. This makes Storage/Pixels
+    // available without maintaining a second password lifecycle.
+    const storageAuthReady = await syncSupabaseStorageIdentity(req.db, user, password);
+
     const token = jwt.sign(
       {
         id: user.id,
@@ -481,7 +533,8 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({
       token,
       tenant: req.tenant,
-      user: { id: user.id, email: user.email, role: user.tenant_role },
+      storageAuthReady,
+      user: { id: user.id, email: user.email, name: user.name || '', role: user.tenant_role },
     });
   } catch (err) {
     console.error('[auth/login]', err);
@@ -827,6 +880,7 @@ app.use('/api/activities', authMiddleware, activitiesRouter);
 app.use('/api/platform', authMiddleware, platformRouter);
 app.use('/api', entryViewsRouter);
 app.use('/api', listViewsRouter);
+app.use('/api/menus', authMiddleware, menusRouter);
 
 // Gizmos and Gadgets admin routes (not gizmo packs)
 app.use('/api', authMiddleware, gizmosRouter);

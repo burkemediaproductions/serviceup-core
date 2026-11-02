@@ -47,6 +47,61 @@ async function syncRoleToSupabase(userRow) {
 
 /* Routes ----------------------------------------------------------- */
 
+// GET /api/users/me — every signed-in user may view their own profile.
+router.get('/me', async (req, res) => {
+  try {
+    const { rows } = await req.db.query(
+      `select u.id, u.email, u.name, tu.role, tu.status
+         from public.users u
+         join public.tenant_users tu on tu.user_id = u.id
+        where u.id = $1 and tu.tenant_id = $2 limit 1`,
+      [req.user.id, req.tenantId],
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Profile not found' });
+    return res.json(rows[0]);
+  } catch (error) {
+    console.error('[GET /api/users/me]', error);
+    return res.status(500).json({ error: 'Failed to load profile' });
+  }
+});
+
+// PATCH /api/users/me — self-service name and password updates.
+router.patch('/me', async (req, res) => {
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : undefined;
+  const password = typeof req.body?.password === 'string' ? req.body.password.trim() : '';
+  if (password && password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  }
+  try {
+    const { rows: existingRows } = await req.db.query(
+      `select u.*, tu.role as tenant_role, tu.status as tenant_status
+         from public.users u join public.tenant_users tu on tu.user_id = u.id
+        where u.id = $1 and tu.tenant_id = $2 limit 1`,
+      [req.user.id, req.tenantId],
+    );
+    if (!existingRows.length) return res.status(404).json({ error: 'Profile not found' });
+    const existing = existingRows[0];
+    const nextName = name === undefined ? existing.name : (name || null);
+    const nextHash = password ? await bcrypt.hash(password, 10) : existing.password_hash;
+    const { rows } = await req.db.query(
+      `update public.users set name = $1, password_hash = $2, updated_at = now()
+        where id = $3 returning id, email, name, supabase_id, updated_at`,
+      [nextName, nextHash, req.user.id],
+    );
+    const updated = { ...rows[0], role: existing.tenant_role, status: existing.tenant_status };
+    if (supabaseAdmin && updated.supabase_id) {
+      const attributes = { user_metadata: { name: updated.name || null } };
+      if (password) attributes.password = password;
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(updated.supabase_id, attributes);
+      if (error) console.error('[PATCH /api/users/me] Supabase sync', error);
+    }
+    return res.json(updated);
+  } catch (error) {
+    console.error('[PATCH /api/users/me]', error);
+    return res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
 // GET /api/users?q=search
 router.get('/', checkPermission('users.manage'), async (req, res) => {
   try {

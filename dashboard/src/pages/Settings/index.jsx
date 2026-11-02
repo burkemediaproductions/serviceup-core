@@ -26,10 +26,12 @@ const PAGE_OPTIONS = [
   { value: '/admin', label: 'Dashboard' },
   { value: '/admin/content', label: 'Content index' },
   { value: '/admin/profile', label: 'Organization Profile' },
+  { value: '/admin/my-profile', label: 'My Profile' },
   { value: '/admin/pixels', label: 'Pixels (Media Library)' },
   { value: '/admin/users', label: 'Users' },
   { value: '/admin/taxonomies', label: 'Taxonomies' },
   { value: '/admin/menus', label: 'Menus' },
+  { value: '/admin/branding', label: 'Branding & Appearance' },
   { value: '/admin/headers', label: 'Headers' },
   { value: '/admin/footers', label: 'Footers' },
   // Quick Builder sits at the root of the admin; include it for easy selection.
@@ -63,6 +65,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
   const [roles, setRoles] = useState([]);
+  const [contentPageOptions, setContentPageOptions] = useState([]);
   const [uploading, setUploading] = useState(false);
 
   // Initialize the form from context settings only once.  Additional keys
@@ -110,10 +113,53 @@ export default function SettingsPage() {
     loadRoles();
   }, []);
 
+  // Build easy navigation choices from real Content Types and their saved
+  // List Views, so client sidebars can be assembled without typing routes.
+  useEffect(() => {
+    let cancelled = false;
+    async function loadContentPages() {
+      try {
+        const response = await api.get('/api/content-types');
+        const types = Array.isArray(response) ? response : response?.data || [];
+        const groups = await Promise.all(types.map(async (type) => {
+          const slug = type.slug || type.id;
+          const typeLabel = type.name || type.label || type.slug || 'Content';
+          const options = [{
+            value: `/admin/content/${slug}`,
+            label: `${typeLabel} — Default list`,
+          }];
+          try {
+            const result = await api.get(`/api/content-types/${slug}/list-views?all=true`);
+            const views = Array.isArray(result) ? result : result?.data || result?.views || [];
+            views.forEach((view) => {
+              if (!view?.slug) return;
+              options.push({
+                value: `/admin/content/${slug}/view/${view.slug}`,
+                label: `${typeLabel} — ${view.label || view.slug}`,
+              });
+            });
+          } catch {
+            // The Content Type's default list is still a valid choice.
+          }
+          return options;
+        }));
+        if (!cancelled) setContentPageOptions(groups.flat());
+      } catch (err) {
+        console.error('[Settings] Failed to load Content Type navigation choices', err);
+      }
+    }
+    loadContentPages();
+    return () => { cancelled = true; };
+  }, []);
+
   // Transform roles into options for the multi-select.
   const roleOptions = useMemo(
     () => roles.map((r) => ({ value: r.slug, label: r.label || r.slug })),
     [roles]
+  );
+  const pageOptions = useMemo(
+    () => [...PAGE_OPTIONS, ...contentPageOptions],
+    [contentPageOptions]
   );
 
   // Bind a setting path to an input change handler.  Supports nested paths
@@ -172,6 +218,15 @@ export default function SettingsPage() {
       return { ...prev, navSidebar: nav };
     });
   }
+  function moveSidebarItem(index, direction) {
+    setForm((prev) => {
+      const nav = Array.isArray(prev.navSidebar) ? [...prev.navSidebar] : [];
+      const target = index + direction;
+      if (target < 0 || target >= nav.length) return prev;
+      [nav[index], nav[target]] = [nav[target], nav[index]];
+      return { ...prev, navSidebar: nav };
+    });
+  }
   function addTopbarItem() {
     setForm((prev) => ({
       ...prev,
@@ -187,6 +242,15 @@ export default function SettingsPage() {
         ? [...prev.navTopbarButtons]
         : [];
       items.splice(index, 1);
+      return { ...prev, navTopbarButtons: items };
+    });
+  }
+  function moveTopbarItem(index, direction) {
+    setForm((prev) => {
+      const items = Array.isArray(prev.navTopbarButtons) ? [...prev.navTopbarButtons] : [];
+      const target = index + direction;
+      if (target < 0 || target >= items.length) return prev;
+      [items[index], items[target]] = [items[target], items[index]];
       return { ...prev, navTopbarButtons: items };
     });
   }
@@ -231,6 +295,18 @@ export default function SettingsPage() {
       return { ...prev, navSidebar: nav };
     });
   }
+  function moveSidebarChild(parentIndex, childIndex, direction) {
+    setForm((prev) => {
+      const nav = Array.isArray(prev.navSidebar) ? [...prev.navSidebar] : [];
+      const parent = nav[parentIndex] || {};
+      const children = Array.isArray(parent.children) ? [...parent.children] : [];
+      const target = childIndex + direction;
+      if (target < 0 || target >= children.length) return prev;
+      [children[childIndex], children[target]] = [children[target], children[childIndex]];
+      nav[parentIndex] = { ...parent, children };
+      return { ...prev, navSidebar: nav };
+    });
+  }
   // Topbar children helpers
   function addTopbarChild(parentIndex) {
     setForm((prev) => {
@@ -258,6 +334,18 @@ export default function SettingsPage() {
       const parent = list[parentIndex] || {};
       const children = Array.isArray(parent.children) ? [...parent.children] : [];
       children.splice(childIndex, 1);
+      list[parentIndex] = { ...parent, children };
+      return { ...prev, navTopbarButtons: list };
+    });
+  }
+  function moveTopbarChild(parentIndex, childIndex, direction) {
+    setForm((prev) => {
+      const list = Array.isArray(prev.navTopbarButtons) ? [...prev.navTopbarButtons] : [];
+      const parent = list[parentIndex] || {};
+      const children = Array.isArray(parent.children) ? [...parent.children] : [];
+      const target = childIndex + direction;
+      if (target < 0 || target >= children.length) return prev;
+      [children[childIndex], children[target]] = [children[target], children[childIndex]];
       list[parentIndex] = { ...parent, children };
       return { ...prev, navTopbarButtons: list };
     });
@@ -303,6 +391,7 @@ export default function SettingsPage() {
       const payload = {
         ...form,
         theme: {
+          ...(form.theme || {}),
           mode: form.theme?.mode || 'light',
         },
       };
@@ -337,7 +426,7 @@ export default function SettingsPage() {
           </p>
         </div>
       </div>
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr),minmax(0,1.2fr)] gap-6 items-start">
+      <div className="grid grid-cols-1 su-settings-grid gap-6 items-start">
         {/* Left column: General + Branding */}
         <div className="space-y-4">
           <section className="su-card">
@@ -350,6 +439,16 @@ export default function SettingsPage() {
                   value={form.appName}
                   onChange={bind('appName')}
                 />
+              </div>
+              <div>
+                <label className="su-label">Dashboard message</label>
+                <input
+                  className="su-input"
+                  value={form.dashboardMessage || ''}
+                  onChange={bind('dashboardMessage')}
+                  placeholder="Your dashboard."
+                />
+                <p className="su-help">Optional tokens: {'{{name}}'}, {'{{name_first}}'}, {'{{name_last}}'}, {'{{user_name}}'}, and {'{{date}}'}.</p>
               </div>
               <div>
                 <label className="su-label">Theme</label>
@@ -376,6 +475,39 @@ export default function SettingsPage() {
                   ))}
                 </select>
               </div>
+            </div>
+          </section>
+          <section className="su-card">
+            <h2 className="su-card-title">Technical information</h2>
+            <p className="text-xs text-gray-500 mb-3">
+              Choose which roles can see raw JSON and developer details.
+            </p>
+            <div className="space-y-2">
+              {Array.from(new Set(['ADMIN', 'EDITOR', 'VIEWER', ...roleOptions.map((r) => String(r.value || '').toUpperCase())])).map((roleName) => (
+                <label key={roleName} className="su-chip su-items-center su-gap-xs">
+                  <input
+                    type="checkbox"
+                    checked={!form.hideJsonByRole?.[roleName]}
+                    onChange={(e) => setForm((prev) => ({
+                      ...prev,
+                      hideJsonByRole: { ...(prev.hideJsonByRole || {}), [roleName]: !e.target.checked },
+                    }))}
+                  />
+                  Show JSON for {roleName === 'ADMIN' ? 'Administrator' : roleName[0] + roleName.slice(1).toLowerCase()}
+                </label>
+              ))}
+            </div>
+            <div className="su-view-visibility-settings">
+              <h3>View controls</h3>
+              <label className="su-toggle-field">
+                <input type="checkbox" checked={form.showEntryViewSwitcher !== false} onChange={bind('showEntryViewSwitcher')} />
+                <span>Show Entry View choices when a role has multiple views</span>
+              </label>
+              <label className="su-toggle-field">
+                <input type="checkbox" checked={form.showListViewSwitcher !== false} onChange={bind('showListViewSwitcher')} />
+                <span>Show List View choices when a role has multiple views</span>
+              </label>
+              <p className="su-help">When disabled—or when a role only has its default view—ServiceUp applies the view without showing a selector.</p>
             </div>
           </section>
           <section className="su-card">
@@ -505,19 +637,17 @@ export default function SettingsPage() {
                       onChange={(e) => updateNavSidebar(i, 'to', e.target.value)}
                     >
                       <option value="">Custom URL…</option>
-                      {PAGE_OPTIONS.map((opt) => (
+                      {pageOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
                         </option>
                       ))}
                     </select>
-                    <button
-                      type="button"
-                      className="su-btn"
-                      onClick={() => removeSidebarItem(i)}
-                    >
-                      ✕
-                    </button>
+                    <div className="su-btn-group">
+                      <button type="button" className="su-btn" onClick={() => moveSidebarItem(i, -1)} disabled={i === 0} title="Move up">↑</button>
+                      <button type="button" className="su-btn" onClick={() => moveSidebarItem(i, 1)} disabled={i === form.navSidebar.length - 1} title="Move down">↓</button>
+                      <button type="button" className="su-btn danger" onClick={() => removeSidebarItem(i)} title="Remove">✕</button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-[minmax(0,1fr),minmax(0,1fr)] gap-2 items-center">
                     <input
@@ -590,19 +720,17 @@ export default function SettingsPage() {
                                 onChange={(e) => updateSidebarChild(i, ci, 'to', e.target.value)}
                               >
                                 <option value="">Custom URL…</option>
-                                {PAGE_OPTIONS.map((opt) => (
+                                {pageOptions.map((opt) => (
                                   <option key={opt.value} value={opt.value}>
                                     {opt.label}
                                   </option>
                                 ))}
                               </select>
-                              <button
-                                type="button"
-                                className="su-btn"
-                                onClick={() => removeSidebarChild(i, ci)}
-                              >
-                                ✕
-                              </button>
+                              <div className="su-btn-group">
+                                <button type="button" className="su-btn" onClick={() => moveSidebarChild(i, ci, -1)} disabled={ci === 0} title="Move up">↑</button>
+                                <button type="button" className="su-btn" onClick={() => moveSidebarChild(i, ci, 1)} disabled={ci === item.children.length - 1} title="Move down">↓</button>
+                                <button type="button" className="su-btn danger" onClick={() => removeSidebarChild(i, ci)} title="Remove">✕</button>
+                              </div>
                             </div>
                             <div className="grid grid-cols-[minmax(0,1fr),minmax(0,1fr),minmax(0,1fr)] gap-2 items-center">
                               <input
@@ -688,19 +816,17 @@ export default function SettingsPage() {
                       onChange={(e) => updateTopbar(i, 'to', e.target.value)}
                     >
                       <option value="">Custom URL…</option>
-                      {PAGE_OPTIONS.map((opt) => (
+                      {pageOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
                         </option>
                       ))}
                     </select>
-                    <button
-                      type="button"
-                      className="su-btn"
-                      onClick={() => removeTopbarItem(i)}
-                    >
-                      ✕
-                    </button>
+                    <div className="su-btn-group">
+                      <button type="button" className="su-btn" onClick={() => moveTopbarItem(i, -1)} disabled={i === 0} title="Move up">↑</button>
+                      <button type="button" className="su-btn" onClick={() => moveTopbarItem(i, 1)} disabled={i === form.navTopbarButtons.length - 1} title="Move down">↓</button>
+                      <button type="button" className="su-btn danger" onClick={() => removeTopbarItem(i)} title="Remove">✕</button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-[minmax(0,1fr),minmax(0,1fr)] gap-2 items-center">
                     <input
@@ -773,19 +899,17 @@ export default function SettingsPage() {
                                 onChange={(e) => updateTopbarChild(i, ci, 'to', e.target.value)}
                               >
                                 <option value="">Custom URL…</option>
-                                {PAGE_OPTIONS.map((opt) => (
+                                {pageOptions.map((opt) => (
                                   <option key={opt.value} value={opt.value}>
                                     {opt.label}
                                   </option>
                                 ))}
                               </select>
-                              <button
-                                type="button"
-                                className="su-btn"
-                                onClick={() => removeTopbarChild(i, ci)}
-                              >
-                                ✕
-                              </button>
+                              <div className="su-btn-group">
+                                <button type="button" className="su-btn" onClick={() => moveTopbarChild(i, ci, -1)} disabled={ci === 0} title="Move up">↑</button>
+                                <button type="button" className="su-btn" onClick={() => moveTopbarChild(i, ci, 1)} disabled={ci === item.children.length - 1} title="Move down">↓</button>
+                                <button type="button" className="su-btn danger" onClick={() => removeTopbarChild(i, ci)} title="Remove">✕</button>
+                              </div>
                             </div>
                             <div className="grid grid-cols-[minmax(0,1fr),minmax(0,1fr),minmax(0,1fr)] gap-2 items-center">
                               <input
@@ -835,7 +959,7 @@ export default function SettingsPage() {
           </div>
         </section>
       </div>
-      <div>
+      <div className="su-settings-save-row">
         <button
           className="su-btn primary"
           onClick={save}
@@ -844,7 +968,7 @@ export default function SettingsPage() {
           {saving ? 'Saving…' : uploading ? 'Uploading…' : 'Save settings'}
         </button>
         {savedMsg && (
-          <span className="ml-3 text-sm text-gray-600">{savedMsg}</span>
+          <span className="su-settings-save-message">{savedMsg}</span>
         )}
       </div>
     </div>

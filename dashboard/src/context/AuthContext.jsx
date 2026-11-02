@@ -43,6 +43,19 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Refresh the session user from the database so profile names and dashboard
+  // greeting tokens never depend on stale login/localStorage data.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    api.get('/api/users/me').then((freshUser) => {
+      if (cancelled || !freshUser) return;
+      setUser(freshUser);
+      window.localStorage.setItem(USER_KEY, JSON.stringify(freshUser));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [token]);
+
   // When user + token present, load permissions for their role
   useEffect(() => {
     async function loadPermissions() {
@@ -91,6 +104,13 @@ export function AuthProvider({ children }) {
     }
   }
 
+  function updateCurrentUser(nextUser) {
+    setUser(nextUser);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+    }
+  }
+
   const value = {
     user,
     token,
@@ -101,6 +121,7 @@ export function AuthProvider({ children }) {
     logout,
     setUser,
     setToken,
+    updateCurrentUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -173,16 +173,36 @@
           "order_index": 2
         },
         {
-          "field_key": "body_html",
-          "type": "richtext",
-          "label": "Body HTML",
-          "order_index": 3
-        },
-        {
-          "field_key": "blocks",
-          "type": "json",
-          "label": "Blocks JSON",
-          "order_index": 4
+          "field_key": "panels",
+          "type": "panels",
+          "label": "Page Sections",
+          "order_index": 3,
+          "config": {
+            "addLabel": "Add Panel",
+            "definitions": [
+              { "key": "hero", "label": "Hero", "fields": [
+                { "field_key": "heading", "label": "Heading", "type": "text", "required": true },
+                { "field_key": "body", "label": "Body", "type": "rich_text" },
+                { "field_key": "image", "label": "Hero image", "type": "image" },
+                { "field_key": "button_label", "label": "Button label", "type": "text" },
+                { "field_key": "button_url", "label": "Button URL", "type": "url" }
+              ]},
+              { "key": "rich_text", "label": "Rich Text", "fields": [
+                { "field_key": "heading", "label": "Heading", "type": "text" },
+                { "field_key": "body", "label": "Body", "type": "rich_text", "required": true }
+              ]},
+              { "key": "cta", "label": "Call to Action", "fields": [
+                { "field_key": "heading", "label": "Heading", "type": "text", "required": true },
+                { "field_key": "body", "label": "Body", "type": "rich_text" },
+                { "field_key": "button_label", "label": "Button label", "type": "text" },
+                { "field_key": "button_url", "label": "Button URL", "type": "url" }
+              ]}
+            ],
+            "templates": [
+              { "key": "standard", "label": "Standard Page", "allowed": ["rich_text", "cta"], "fixed": false },
+              { "key": "homepage", "label": "Homepage", "allowed": ["hero", "rich_text", "cta"], "fixed": false, "defaults": ["hero"] }
+            ]
+          }
         }
       ]
     }
@@ -197,15 +217,17 @@
       "data": {
         "title": "Home",
         "slug": "home",
-        "body_html": "<h1>Welcome to the Demo Website</h1><p>This is powered by ServiceUp Gadgets, Gizmos, and Gizmo Packs.</p>",
-        "blocks": {
-          "blocks": [
+        "panels": {
+          "template": "homepage",
+          "panels": [
             {
+              "id": "starter-home-hero",
               "type": "hero",
-              "props": {
-                "headline": "Welcome to the Demo Site",
-                "subheading": "Built with Gadgets, Gizmos, and Gizmo Packs.",
-                "primary_cta": { "label": "Get Started", "href": "/contact" }
+              "data": {
+                "heading": "Welcome to the Demo Site",
+                "body": { "type": "doc", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Built with ServiceUp Panels, Gadgets, Gizmos, and Gizmo Packs." }] }] },
+                "button_label": "Get Started",
+                "button_url": "/contact"
               }
             }
           ]

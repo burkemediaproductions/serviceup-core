@@ -52,6 +52,8 @@ const EMPTY_CORE = {
   hideSlug: false,
   hideStatus: false,
   hidePreview: false,
+  layout: "split",
+  richTextLarge: false,
 
   // if true, and slug is empty, Editor can auto-fill slug from derived/manual title
   autoSlugFromTitleIfEmpty: true,
@@ -133,6 +135,7 @@ function pickBestViewBySlug(views, slug) {
 export default function EntryViews() {
   const params = useParams();
   const navigate = useNavigate();
+  const isCreatingView = params.viewSlug === "__new__";
 
   // stages: selecting content type, selecting a view, editing a view
   const [stage, setStage] = useState("types"); // 'types' | 'views' | 'edit'
@@ -355,7 +358,38 @@ export default function EntryViews() {
 
       setViews(normalizedViews);
 
-      if (viewSlugFromRoute) {
+      if (viewSlugFromRoute === "__new__") {
+        const baseLabel = "New editor";
+        let label = baseLabel;
+        let suffix = 1;
+        const existing = normalizedViews.map((v) =>
+          String(v.label || v.slug || "").toLowerCase()
+        );
+        while (existing.includes(label.toLowerCase())) {
+          suffix += 1;
+          label = `${baseLabel} ${suffix}`;
+        }
+
+        setCurrentLabel(label);
+        setAssignedRoles(["ADMIN"]);
+        setDefaultRoles(["ADMIN"]);
+        setAdminOnly(false);
+        setCore(EMPTY_CORE);
+        setSections([
+          {
+            id: "widget-1",
+            title: "Widget 1",
+            description: "",
+            layout: "one-column",
+            fields: [],
+          },
+        ]);
+        setSelectedSectionIndex(0);
+        setActiveViewSlug(slugify(label));
+        setSlugManuallyEdited(false);
+        setStage("edit");
+        setDirty(true);
+      } else if (viewSlugFromRoute) {
         const found = pickBestViewBySlug(normalizedViews, viewSlugFromRoute);
         if (found) {
           loadViewForEdit(found);
@@ -593,38 +627,7 @@ const loadViewForEdit = (view) => {
 
   const handleNewView = () => {
     if (!selectedTypeId) return;
-
-    const baseLabel = "New editor";
-    let label = baseLabel;
-    let suffix = 1;
-    const existing = views.map((v) => (v.label || v.slug || "").toLowerCase());
-    while (existing.includes(label.toLowerCase())) {
-      suffix += 1;
-      label = `${baseLabel} ${suffix}`;
-    }
-    const slug = slugify(label);
-
-    setCurrentLabel(label);
-    setAssignedRoles(["ADMIN"]);
-    setDefaultRoles(["ADMIN"]);
-    setAdminOnly(false);
-    setCore(EMPTY_CORE);
-    setSections([
-      {
-        id: "widget-1",
-        title: "Widget 1",
-        description: "",
-        layout: "one-column",
-        fields: [],
-      },
-    ]);
-    setSelectedSectionIndex(0);
-    setActiveViewSlug(slug);
-    setSlugManuallyEdited(false);
-
-    setStage("edit");
-    setDirty(true);
-    navigate(`/admin/settings/entry-views/${selectedTypeId}/${slug}`);
+    navigate(`/admin/settings/entry-views/${selectedTypeId}/__new__`);
   };
 
   // ---------------------------------------------------------------------------
@@ -712,6 +715,12 @@ setViews(normalizedNewViews);
 const newly = pickBestViewBySlug(normalizedNewViews, slug);
 if (newly) loadViewForEdit(newly);
 
+      if (isCreatingView) {
+        navigate(`/admin/settings/entry-views/${selectedTypeId}/${slug}`, {
+          replace: true,
+        });
+      }
+
 
       setDirty(false);
       setSaveMessage("View saved.");
@@ -781,7 +790,7 @@ if (newly) loadViewForEdit(newly);
         })}
         {!contentTypes.length && (
           <p className="su-text-sm su-text-muted">
-            No content types found. Create one in Quick Builder first.
+            No content types found. Create a content type first.
           </p>
         )}
       </div>
@@ -1058,7 +1067,7 @@ if (newly) loadViewForEdit(newly);
                   
                    setActiveViewSlug(nextSlug);
 
-                   if (!selectedTypeId) return;
+                   if (!selectedTypeId || isCreatingView) return;
                    navigate(`/admin/settings/entry-views/${selectedTypeId}/${nextSlug}`, {
                      replace: true,
                    });
@@ -1102,7 +1111,7 @@ if (newly) loadViewForEdit(newly);
                         <option value="template">Derived (template)</option>
                       </select>
                       <div className="su-text-xs su-text-muted">
-                        Use “Derived” for surrogates/intended parents.
+                        Use “Derived” when the title should be generated automatically from entry fields.
                       </div>
                     </div>
 
@@ -1170,6 +1179,43 @@ if (newly) loadViewForEdit(newly);
                         }}
                       />
                       Hide Preview panel
+                    </label>
+
+                    <div>
+                      <label className="su-form-label">Editor layout</label>
+                      <div className="su-layout-choice-grid">
+                        {[
+                          ["split", "Side by side", "Edit and preview in two columns."],
+                          ["stacked", "Full width", "Edit first, with preview underneath."],
+                          ["toggle", "Toggle preview", "Full-width editor with a Show Preview button."],
+                        ].map(([value, label, description]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            className={"su-layout-choice" + ((core.layout || "split") === value ? " is-active" : "")}
+                            onClick={() => { setCore((prev) => ({ ...prev, layout: value })); setDirty(true); }}
+                          >
+                            <span className={`su-layout-choice-icon is-${value}`} aria-hidden="true"><i /><i /></span>
+                            <strong>{label}</strong>
+                            <small>{description}</small>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="su-text-xs su-text-muted">
+                        Full-width options are useful for writing-focused content such as posts, articles, and pages.
+                      </div>
+                    </div>
+
+                    <label className="su-chip su-items-center su-gap-xs">
+                      <input
+                        type="checkbox"
+                        checked={!!core.richTextLarge}
+                        onChange={(e) => {
+                          setCore((prev) => ({ ...prev, richTextLarge: e.target.checked }));
+                          setDirty(true);
+                        }}
+                      />
+                      Use a larger rich-text writing area
                     </label>
 
                     <label className="su-chip su-items-center su-gap-xs md:col-span-2">

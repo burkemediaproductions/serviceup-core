@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useSettings } from '../../context/SettingsContext';
+import LoadingPanel from '../../components/LoadingPanel';
 import { useAuth } from '../../context/AuthContext';
 
 // ✅ NEW: list/widget display helper (handles repeaters, nested repeaters, etc.)
 import { formatFieldValueForList } from '../../components/FieldInput';
+import { isRichTextDocument, richTextToPlainText } from '../../components/RichTextContent';
 
 
 // ---------------------------------------------------------------------------
@@ -185,7 +187,8 @@ export default function TypeList() {
   const roleUpper = role.toUpperCase();
 
   // 🔔 listen for global “list views changed” bumps
-  const { listViewsVersion } = useSettings();
+  const { listViewsVersion, settings } = useSettings();
+  const hideJson = !!settings?.hideJsonByRole?.[roleUpper];
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -211,6 +214,11 @@ export default function TypeList() {
 
     (async () => {
       setLoading(true);
+      setRows([]);
+      setColumns([]);
+      setListViews([]);
+      setActiveViewSlug('');
+      setActiveViewLabel('');
       setError('');
       try {
         // 1) Load entries for this content type (by slug)
@@ -471,6 +479,10 @@ export default function TypeList() {
 
     if (value === null || typeof value === 'undefined') return '';
 
+    if (isRichTextDocument(value)) {
+      return <span className="su-rich-list-excerpt">{richTextToPlainText(value, 180)}</span>;
+    }
+
     // ✅ NEW: If this key maps to an actual field definition, use the canonical
     // formatter (repeaters, nested repeaters, relations, etc.) for list/widget display.
     if (Array.isArray(contentType?.fields)) {
@@ -599,6 +611,10 @@ export default function TypeList() {
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
+  if (loading) {
+    return <LoadingPanel label="Loading entries…" />;
+  }
+
   return (
     <div className="su-page">
       <div className="su-page-header su-flex su-justify-between su-items-center su-mb-md">
@@ -608,26 +624,19 @@ export default function TypeList() {
           </h1>
           <p className="su-page-subtitle">Manage entries for this content type.</p>
 
-          {activeViewLabel && (
+          {settings?.showListViewSwitcher !== false && listViews.length > 1 && activeViewLabel && (
             <p className="su-text-xs su-text-muted">
               Using view: <strong>{activeViewLabel}</strong>{' '}
               {activeViewIsDefaultForRole && '(default for this role)'}
             </p>
           )}
 
-          {!activeViewLabel && listViews.length === 0 && (
-            <p className="su-text-xs su-text-muted">
-              No list views configured yet for role {roleUpper}. Using a fallback
-              layout. You can customize columns in{' '}
-              <strong>Settings → List Views</strong>.
-            </p>
-          )}
         </div>
 
         <div className="su-flex su-gap-sm">
           <button
             type="button"
-            className="su-btn su-btn-primary"
+            className="su-btn primary"
             onClick={handleClickNew}
           >
             + New entry
@@ -635,7 +644,7 @@ export default function TypeList() {
         </div>
       </div>
 
-      {listViews.length > 0 && (
+      {settings?.showListViewSwitcher !== false && listViews.length > 1 && (
         <div className="su-card su-mb-md">
           <div className="su-card-body su-flex su-flex-wrap su-gap-sm su-items-center">
             <span className="su-text-sm su-text-muted">Views:</span>
@@ -652,9 +661,7 @@ export default function TypeList() {
                 <button
                   key={v.slug}
                   type="button"
-                  className={
-                    'su-chip' + (v.slug === activeViewSlug ? ' su-chip--active' : '')
-                  }
+                  className={'su-btn su-view-btn' + (v.slug === activeViewSlug ? ' primary' : '')}
                   onClick={() => handleChooseView(v.slug)}
                 >
                   {v.label || v.slug}
@@ -668,8 +675,6 @@ export default function TypeList() {
 
       <div className="su-card">
         <div className="su-card-body">
-          {loading && <p>Loading entries…</p>}
-
           {error && <div className="su-alert su-alert-danger su-mb-md">{error}</div>}
 
           {!loading && !rows.length && !error && (
@@ -710,7 +715,7 @@ export default function TypeList() {
         </div>
       </div>
 
-      <div className="su-card su-mt-lg">
+      {!hideJson && <div className="su-card su-mt-lg">
         <div className="su-card-header">
           <h2 className="su-card-title">Debug</h2>
         </div>
@@ -737,7 +742,7 @@ export default function TypeList() {
             )}
           </pre>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

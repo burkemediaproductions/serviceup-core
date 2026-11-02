@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../lib/api";
-import FieldInput from "../../components/FieldInput";
+import FieldInput, { PanelsPreview } from "../../components/FieldInput";
+import LoadingPanel from "../../components/LoadingPanel";
+import RichTextContent, { isRichTextDocument } from "../../components/RichTextContent";
+import { useSettings } from "../../context/SettingsContext";
+import { useAuth } from "../../context/AuthContext";
 
 // Simple slug helper
 function slugify(value) {
@@ -24,40 +28,6 @@ function normalizeConfig(cfg) {
     }
   }
   return {};
-}
-
-function getRoleFromToken() {
-  try {
-    const token =
-      window.localStorage.getItem("token") ||
-      window.localStorage.getItem("serviceup_token") ||
-      window.localStorage.getItem("jwt") ||
-      window.localStorage.getItem("authToken");
-
-    if (!token) return null;
-
-    const parts = String(token).split(".");
-    if (parts.length < 2) return null;
-
-    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const json = decodeURIComponent(
-      atob(b64)
-        .split("")
-        .map((c) => `%${("00" + c.charCodeAt(0).toString(16)).slice(-2)}`)
-        .join("")
-    );
-
-    const payload = JSON.parse(json);
-    return (
-      payload?.role ||
-      payload?.user?.role ||
-      payload?.claims?.role ||
-      payload?.app_metadata?.role ||
-      null
-    );
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -282,6 +252,8 @@ function deriveTitleFromTemplate(template, data) {
 }
 
 export default function Editor() {
+  const { settings } = useSettings();
+  const { user } = useAuth();
   const { typeSlug, entryId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -300,10 +272,7 @@ export default function Editor() {
 
 
 
-  const roleUpper = useMemo(() => {
-    const r = getRoleFromToken();
-    return String(r || "VIEWER").toUpperCase();
-  }, []);
+  const roleUpper = String(user?.role || "VIEWER").toUpperCase();
 
   const isNew = !entryId || entryId === "new";
 
@@ -334,6 +303,7 @@ export default function Editor() {
   const [editorViews, setEditorViews] = useState([]);
   const [activeViewSlug, setActiveViewSlug] = useState("");
   const [activeViewLabel, setActiveViewLabel] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const overallLoading = loadingEntry || loadingType;
 
@@ -353,9 +323,13 @@ export default function Editor() {
       hideSlug: !!c.hideSlug,
       hideStatus: !!c.hideStatus,
       hidePreview: !!c.hidePreview,
+      layout: ["stacked", "toggle"].includes(c.layout) ? c.layout : "split",
+      richTextLarge: !!c.richTextLarge,
       autoSlugFromTitleIfEmpty: c.autoSlugFromTitleIfEmpty !== false,
     };
   }, [editorViewConfig]);
+
+  useEffect(() => { setPreviewOpen(false); }, [activeViewSlug]);
 
   // ---------------------------------------------------------------------------
   // Load content type (with fields) + editor views for the current role
@@ -365,6 +339,9 @@ export default function Editor() {
 
     async function loadTypeAndView() {
       setLoadingType(true);
+      setContentType(null);
+      setEditorViewConfig(null);
+      setEditorViews([]);
       setError("");
 
       try {
@@ -894,18 +871,32 @@ export default function Editor() {
     return prettyValue(v);
   }
 
+  const hideJson = !!settings?.hideJsonByRole?.[roleUpper];
+
+  if (overallLoading) {
+    return <LoadingPanel label="Loading editor…" />;
+  }
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
   return (
-    <div className="su-grid cols-2">
+    <div className={`su-grid ${coreCfg.layout === "split" ? "cols-2" : "su-entry-layout-stacked"}`}>
+      {!coreCfg.hidePreview && coreCfg.layout === "toggle" && (
+        <div className="su-entry-mode-bar">
+          <button type="button" className="su-btn primary su-preview-toggle" onClick={() => setPreviewOpen((open) => !open)} aria-pressed={previewOpen}>
+            <span aria-hidden="true">{previewOpen ? "✎" : "◫"}</span>
+            {previewOpen ? "Back to editor" : "Preview entry"}
+          </button>
+        </div>
+      )}
       {/* LEFT: Editor card */}
-      <div className="su-card">
-        <h2 style={{ marginTop: 0, marginBottom: 12 }}>
-          {overallLoading ? "Edit entry" : isNew ? `New ${typeSlug} entry` : `Edit ${typeSlug}`}
-        </h2>
+      {!(coreCfg.layout === "toggle" && previewOpen) && <div className="su-card">
+        <div className="su-entry-heading">
+          <h2 style={{ margin: 0 }}>{isNew ? `New ${typeSlug} entry` : `Edit ${typeSlug}`}</h2>
+        </div>
 
-        {editorViews.length > 0 && (
+        {settings?.showEntryViewSwitcher !== false && editorViews.length > 1 && (
           <div className="su-card su-mb-md">
             <div className="su-card-body su-flex su-flex-wrap su-gap-sm su-items-center">
               <span className="su-text-sm su-text-muted">Views:</span>
@@ -920,7 +911,7 @@ export default function Editor() {
                   <button
                     key={v.slug}
                     type="button"
-                    className={"su-chip" + (v.slug === activeViewSlug ? " su-chip--active" : "")}
+                    className={"su-btn su-view-btn" + (v.slug === activeViewSlug ? " primary" : "")}
                     onClick={() => {
                       if (v.slug === activeViewSlug) return;
                       // ✅ drive selection via URL param; loader effect will apply config
@@ -968,11 +959,9 @@ export default function Editor() {
           </div>
         )}
 
-        {overallLoading && !isNew && <p style={{ fontSize: 13, opacity: 0.7 }}>Loading entry…</p>}
-
         <form onSubmit={handleSave}>
           {/* Core fields */}
-          <div style={{ display: "grid", gap: 12, marginBottom: 20 }}>
+          <div className={coreCfg.layout === "stacked" ? "su-entry-core-row" : ""} style={{ display: "grid", gap: 12, marginBottom: 20 }}>
             {!coreCfg.hideTitle && (
               <label style={{ fontSize: 13 }}>
                 {coreCfg.titleLabel || "Title"}
@@ -1026,14 +1015,11 @@ export default function Editor() {
               }}
             >
               <h3 style={{ margin: 0, fontSize: 14 }}>Fields</h3>
-              <span style={{ fontSize: 11, opacity: 0.7 }}>
-                Powered by QuickBuilder &amp; editor views.
-              </span>
             </div>
 
             {!sections.length && (
               <p style={{ fontSize: 12, opacity: 0.7 }}>
-                No fields defined for this content type yet. Create fields in QuickBuilder.
+                No fields are configured for this content type yet.
               </p>
             )}
 
@@ -1074,7 +1060,7 @@ export default function Editor() {
                           </label>
 
                           <FieldInput
-                            field={def}
+                            field={{ ...def, editor_large: coreCfg.richTextLarge }}
                             value={value}
                             onChange={(val) => {
                               if (!key) return;
@@ -1123,11 +1109,11 @@ export default function Editor() {
             </button>
           </div>
         </form>
-      </div>
+      </div>}
 
       {/* RIGHT: Preview card (can be hidden by view config) */}
-      {!coreCfg.hidePreview && (
-        <div className="su-card">
+      {!coreCfg.hidePreview && (coreCfg.layout !== "toggle" || previewOpen) && (
+        <div className="su-card su-preview-panel">
           <h2 style={{ marginTop: 0, marginBottom: 12 }}>Preview</h2>
 
           <div
@@ -1165,30 +1151,22 @@ export default function Editor() {
                   }}
                 >
                   <div style={{ opacity: 0.7 }}>{k}</div>
-                  <div>{prettyValueForField(k, v)}</div>
+                  <div className="su-preview-value">
+                    {String(fieldDefByKey[k]?.type || "").toLowerCase() === "panels"
+                      ? <PanelsPreview field={fieldDefByKey[k]} value={v} />
+                      : isRichTextDocument(v) ? <RichTextContent value={v} /> : prettyValueForField(k, v)}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: 14 }}>
-            Raw JSON (<code>entries.data</code>)
-          </h3>
-          <pre
-            style={{
-              fontSize: 11,
-              background: "#0b1120",
-              color: "#d1fae5",
-              borderRadius: 10,
-              padding: 10,
-              maxHeight: 480,
-              overflow: "auto",
-              fontFamily:
-                'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-            }}
-          >
-            {JSON.stringify(previewData, null, 2)}
-          </pre>
+        </div>
+      )}
+      {!hideJson && (
+        <div className="su-card su-entry-json">
+          <h2 style={{ marginTop: 0, marginBottom: 8, fontSize: 16 }}>Entry JSON</h2>
+          <pre className="su-code-block">{JSON.stringify(previewData, null, 2)}</pre>
         </div>
       )}
     </div>

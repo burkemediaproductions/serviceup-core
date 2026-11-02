@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ServiceUp loading">
+  <defs><linearGradient id="g" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#14d8c4"/><stop offset="1" stop-color="#2563eb"/></linearGradient></defs>
+  <path fill="none" stroke="url(#g)" stroke-width="8" stroke-linecap="round" d="M49 18A23 23 0 1 0 54 36"/>
+  <path fill="url(#g)" d="M43 8l14 5-5 14-4-7-8-4z"/>
+</svg>

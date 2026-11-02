@@ -1,11 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import {
+  applyBranding, cacheSettings, getEnabledThemeModes, preloadBrandImages,
+  readCachedSettings, readPreferredThemeMode, savePreferredThemeMode,
+} from '../lib/branding';
 
 const SettingsContext = createContext(null);
 
 export function SettingsProvider({ children }) {
-  const [settings, setSettings] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const cachedSettings = readCachedSettings();
+  const [settings, setSettingsState] = useState(cachedSettings);
+  const [themeMode, setThemeModeState] = useState(() => readPreferredThemeMode(cachedSettings));
+  const [loading, setLoading] = useState(!cachedSettings);
   const [listViewsVersion, setListViewsVersion] = useState(0);
 
   const bumpListViewsVersion = () => {
@@ -17,10 +23,8 @@ export function SettingsProvider({ children }) {
     (async () => {
       try {
         const data = await api.get('/settings');
+        if (!cachedSettings) await preloadBrandImages(data);
         setSettings(data);
-
-        const mode = data?.theme?.mode || 'light';
-        document.documentElement.setAttribute('data-theme', mode);
       } catch (e) {
         console.warn('Failed to load settings, using defaults', e);
 
@@ -47,10 +51,14 @@ export function SettingsProvider({ children }) {
             EDITOR: false,
             ADMIN: false,
           },
+          hideJsonByRole: {
+            VIEWER: true,
+            EDITOR: true,
+            ADMIN: false,
+          },
         };
 
         setSettings(fallback);
-        document.documentElement.setAttribute('data-theme', fallback.theme.mode);
       } finally {
         setLoading(false);
       }
@@ -61,60 +69,38 @@ export function SettingsProvider({ children }) {
   useEffect(() => {
     if (!settings) return;
 
-    const theme = settings?.theme || {};
+    const appliedMode = applyBranding(settings, themeMode);
+    if (appliedMode !== themeMode) setThemeModeState(appliedMode);
+    cacheSettings(settings);
+  }, [settings, themeMode]);
 
-    // --- Title ---
-    const title = settings?.app_name || settings?.name || 'ServiceUp';
-    document.title = title;
+  function setSettings(next) {
+    setSettingsState((current) => {
+      const resolved = typeof next === 'function' ? next(current) : next;
+      if (resolved) {
+        applyBranding(resolved, themeMode);
+        cacheSettings(resolved);
+      }
+      return resolved;
+    });
+  }
 
-    // --- CSS token sync (DB -> CSS variables) ---
-    const root = document.documentElement;
+  function setThemeMode(nextMode) {
+    const enabled = getEnabledThemeModes(settings);
+    const resolved = enabled.includes(nextMode) ? nextMode : enabled[0];
+    savePreferredThemeMode(resolved);
+    setThemeModeState(resolved);
+  }
 
-    // These map to your token-first theme.css approach
-    if (theme.primary) root.style.setProperty('--su-primary', theme.primary);
-    if (theme.primary) root.style.setProperty('--su-accent', theme.primary);
-    if (theme.secondary) root.style.setProperty('--su-secondary', theme.secondary);
-    if (theme.accent) root.style.setProperty('--su-link', theme.accent);
-    if (theme.surface) root.style.setProperty('--su-surface', theme.surface);
-    if (theme.text) root.style.setProperty('--su-text', theme.text);
+  function cycleThemeMode() {
+    const enabled = getEnabledThemeModes(settings);
+    const index = enabled.indexOf(themeMode);
+    setThemeMode(enabled[(index + 1) % enabled.length]);
+  }
 
-    // Optional future tokens if you store them
-    if (theme.bg) root.style.setProperty('--su-bg', theme.bg);
-    if (theme.border) root.style.setProperty('--su-border', theme.border);
-    if (theme.radius != null) root.style.setProperty('--su-radius', `${theme.radius}px`);
-    if (theme.headingFont) root.style.setProperty('--su-heading-font', theme.headingFont);
-    if (theme.bodyFont) root.style.setProperty('--su-body-font', theme.bodyFont);
-
-    // --- Favicon ---
-    const faviconUrl = settings?.faviconUrl || '/assets/logo.svg';
-    let favicon = document.querySelector('link[rel="icon"]');
-    if (!favicon) {
-      favicon = document.createElement('link');
-      favicon.rel = 'icon';
-      document.head.appendChild(favicon);
-    }
-    favicon.href = faviconUrl;
-
-    // --- Apple touch icon (iOS home screen icon) ---
-    const appIconUrl = settings?.appIconUrl || '/assets/logo.svg';
-    let apple = document.querySelector('link[rel="apple-touch-icon"]');
-    if (!apple) {
-      apple = document.createElement('link');
-      apple.rel = 'apple-touch-icon';
-      document.head.appendChild(apple);
-    }
-    apple.href = appIconUrl;
-
-    // --- theme-color meta (mobile browser UI color) ---
-    const themeColor = theme.primary || '#000000';
-    let meta = document.querySelector('meta[name="theme-color"]');
-    if (!meta) {
-      meta = document.createElement('meta');
-      meta.name = 'theme-color';
-      document.head.appendChild(meta);
-    }
-    meta.content = themeColor;
-  }, [settings]);
+  // On a brand-new browser, wait for the first settings response so the UI's
+  // first visible paint already has the correct tenant colors and imagery.
+  if (loading && !settings) return null;
 
   return (
     <SettingsContext.Provider
@@ -122,6 +108,10 @@ export function SettingsProvider({ children }) {
         settings,
         setSettings,
         loading,
+        themeMode,
+        setThemeMode,
+        cycleThemeMode,
+        enabledThemeModes: getEnabledThemeModes(settings),
         listViewsVersion,
         bumpListViewsVersion,
       }}
