@@ -92,7 +92,6 @@ async function getListViewsForTypeAndRole(db, contentTypeId, role) {
  */
 router.get(
   '/content-types/:id/list-views',
-  checkPermission('manage_content_types'),
   async (req, res) => {
     try {
       const { id: idOrSlug } = req.params;

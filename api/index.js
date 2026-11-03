@@ -878,8 +878,11 @@ app.use('/api/integrations', authMiddleware, integrationsRouter);
 app.use('/api/pixels', authMiddleware, pixelsRouter);
 app.use('/api/activities', authMiddleware, activitiesRouter);
 app.use('/api/platform', authMiddleware, platformRouter);
-app.use('/api', entryViewsRouter);
-app.use('/api', listViewsRouter);
+// Assigned Entry/List Views are runtime configuration, so every signed-in
+// role must be able to read its own views. Their PUT/DELETE routes still use
+// manage_content_types inside the routers.
+app.use('/api', authMiddleware, entryViewsRouter);
+app.use('/api', authMiddleware, listViewsRouter);
 app.use('/api/menus', authMiddleware, menusRouter);
 
 // Gizmos and Gadgets admin routes (not gizmo packs)

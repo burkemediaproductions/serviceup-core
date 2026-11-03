@@ -139,6 +139,23 @@ test('dashboard polish includes branded chrome, reorderable navigation, and stab
   assert.match(editor, /Preview entry/);
   assert.match(read('dashboard/src/pages/Users/index.jsx'), /su-user-name-actions/);
 });
+test('signed-in non-admin roles can read assigned Entry and List Views', () => {
+  const app = read('api/index.js');
+  const entryViews = read('api/routes/entryViews.js');
+  const listViews = read('api/routes/listViews.js');
+  assert.match(app, /app\.use\('\/api', authMiddleware, entryViewsRouter\)/);
+  assert.match(app, /app\.use\('\/api', authMiddleware, listViewsRouter\)/);
+  assert.doesNotMatch(
+    entryViews,
+    /'\/content-types\/:id\/editor-views',\s*checkPermission\('manage_content_types'\)/
+  );
+  assert.doesNotMatch(
+    listViews,
+    /'\/content-types\/:id\/list-views',\s*checkPermission\('manage_content_types'\)/
+  );
+  assert.match(entryViews, /'\/content-types\/:id\/editor-view',\s*checkPermission\('manage_content_types'\)/);
+  assert.match(listViews, /'\/content-types\/:id\/list-view',\s*checkPermission\('manage_content_types'\)/);
+});
 test('navigation settings offer Content Types and saved List Views', () => {
   const page = read('dashboard/src/pages/Settings/index.jsx');
   assert.match(page, /contentPageOptions/);

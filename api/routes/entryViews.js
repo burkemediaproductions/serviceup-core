@@ -102,7 +102,6 @@ async function getEditorViewsForType(db, contentTypeId) {
  */
 router.get(
   '/content-types/:id/editor-views',
-  checkPermission('manage_content_types'),
   async (req, res) => {
     try {
       const { id: idOrSlug } = req.params;
