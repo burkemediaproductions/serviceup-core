@@ -31,6 +31,7 @@ import pixelsRouter from './routes/pixels.js';
 import profileRouter from './routes/profile.js';
 import activitiesRouter from './routes/activities.js';
 import platformRouter from './routes/platform.js';
+import tenantTransferRouter from './routes/tenantTransfer.js';
 
 import mountExtraRoutes from './extra-routes.js';
 import { mountGizmoPacks } from './gizmos-loader.js';
@@ -128,7 +129,7 @@ process.on('uncaughtException', (err) => {
 });
 
 /* ----------------------- Parsers & logging ------------------------- */
-const jsonParser = express.json({ limit: "2mb" });
+const jsonParser = express.json({ limit: "15mb" });
 
 // IMPORTANT:
 // Any /api/gizmos/<slug>/webhook route must receive RAW body (for signature verification).
@@ -878,6 +879,7 @@ app.use('/api/integrations', authMiddleware, integrationsRouter);
 app.use('/api/pixels', authMiddleware, pixelsRouter);
 app.use('/api/activities', authMiddleware, activitiesRouter);
 app.use('/api/platform', authMiddleware, platformRouter);
+app.use('/api/tenant-transfer', authMiddleware, tenantTransferRouter);
 // Assigned Entry/List Views are runtime configuration, so every signed-in
 // role must be able to read its own views. Their PUT/DELETE routes still use
 // manage_content_types inside the routers.

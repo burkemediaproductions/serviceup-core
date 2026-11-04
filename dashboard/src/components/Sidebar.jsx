@@ -60,6 +60,7 @@ export default function Sidebar({ onClose, role = "VIEWER", onLogout }) {
           { label: "Dashboards", to: "/admin/settings/dashboards" },
           { label: "Permissions", to: "/admin/settings/permissions" },
           { label: "Integrations", to: "/admin/settings/integrations" },
+          { label: "Import & Export", to: "/admin/settings/import-export" },
           { label: "Entry Views", to: "/admin/settings/entry-views" },
           { label: "List Views", to: "/admin/settings/list-views" },
         ],

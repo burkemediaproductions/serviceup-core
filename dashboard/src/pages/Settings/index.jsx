@@ -43,6 +43,7 @@ const PAGE_OPTIONS = [
   { value: '/admin/settings/permissions', label: 'Permissions (Settings)' },
   { value: '/admin/settings/entry-views', label: 'Entry Views (Settings)' },
   { value: '/admin/settings/list-views', label: 'List Views (Settings)' },
+  { value: '/admin/settings/import-export', label: 'Import & Export (Settings)' },
 ];
 
 // Target options for links.  These control whether a link opens in the same

@@ -172,6 +172,14 @@ test('successful ServiceUp login synchronizes Supabase Storage identity', () => 
   assert.match(login, /supabase\.auth\.signInWithPassword/);
   assert.match(app, /name: user\.name \|\| ''/);
 });
+test('Supabase clients prefer current publishable and secret API keys', () => {
+  const browserClient = read('dashboard/src/lib/supabaseClient.js');
+  const serverClient = read('api/lib/supabaseAdmin.js');
+  assert.match(browserClient, /VITE_SUPABASE_PUBLISHABLE_KEY/);
+  assert.match(browserClient, /VITE_SUPABASE_ANON_KEY/);
+  assert.match(serverClient, /SUPABASE_SECRET_KEY/);
+  assert.match(serverClient, /SUPABASE_SERVICE_ROLE_KEY/);
+});
 test('users have a permission-free self-service My Profile page', () => {
   const usersRoute = read('api/routes/users.js');
   const profile = read('dashboard/src/pages/MyProfile/index.jsx');
@@ -206,4 +214,23 @@ test('Panels provide template-aware page composition without frontend Widgets', 
   assert.match(builder, /Advanced JSON/);
   const pageType = website.content_types.find((item) => item.slug === 'page');
   assert.equal(pageType.fields.some((field) => field.type === 'panels'), true);
+});
+
+test('tenant Import & Export is guarded, tenant-locked, dry-runnable, and backed up', () => {
+  const route = read('api/routes/tenantTransfer.js');
+  const app = read('api/index.js');
+  const migration = read('db/009_tenant_imports.sql');
+  const dashboard = read('dashboard/src/pages/Settings/ImportExport.jsx');
+  assert.match(app, /tenantTransferRouter/);
+  assert.match(app, /express\.json\(\{ limit: "15mb" \}\)/);
+  assert.match(route, /checkPermission\('roles\.manage'\)/);
+  assert.match(route, /manifest\.tenant_slug/);
+  assert.match(route, /SAVEPOINT tenant_manifest_import/);
+  assert.match(route, /ROLLBACK TO SAVEPOINT tenant_manifest_import/);
+  assert.match(route, /backupTenant/);
+  assert.match(route, /dry_run/);
+  assert.match(migration, /create table if not exists public\.tenant_imports/);
+  assert.match(migration, /force row level security/);
+  assert.match(dashboard, /Run dry test/);
+  assert.match(dashboard, /Download pre-import backup/);
 });

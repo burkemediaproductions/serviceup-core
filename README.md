@@ -63,4 +63,4 @@ Terminology is intentionally narrow: **Widgets** are small dashboard components,
 - Replace the placeholder permissions JSON screen with a permission matrix UI.
 - Add automated API tests against a disposable database and frontend component/flow tests.
 - Decide whether `api/site/` remains a supported reference public site or moves to an example package.
-- Build tenant export/import tooling before moving the first shared client to dedicated infrastructure.
+- Tenant Import & Export is available under Settings with validation, dry runs, tenant locking, transaction rollback, and pre-import backups. See `docs/IMPORT_EXPORT.md`.

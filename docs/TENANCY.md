@@ -26,7 +26,7 @@ Each Netlify dashboard can identify its client explicitly:
 VITE_SERVICEUP_TENANT=client-slug
 VITE_API_BASE=https://shared-api.example.com
 VITE_SUPABASE_URL=https://shared-project.supabase.co
-VITE_SUPABASE_ANON_KEY=...
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
 Register every production frontend hostname in `tenant_domains`. Domain resolution is used for CORS and for public website/app requests. Server-to-server callers should send `X-ServiceUp-Tenant`.

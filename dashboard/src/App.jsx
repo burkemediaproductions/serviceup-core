@@ -36,6 +36,7 @@ import ProfilePage from './pages/Profile';
 import BrandingPage from './pages/Branding';
 import ActivityPage from './pages/Activity';
 import MyProfilePage from './pages/MyProfile';
+import ImportExportPage from './pages/Settings/ImportExport';
 
 
 function RequireAuth({ children }) {
@@ -264,6 +265,10 @@ function App() {
                 </RequirePermission>
               </RequireAuth>
             }
+          />
+          <Route
+            path="/admin/settings/import-export"
+            element={<RequireAuth><RequirePermission slug="roles.manage"><AdminLayout><ImportExportPage /></AdminLayout></RequirePermission></RequireAuth>}
           />
 
           {/* Entry editor views: allow dynamic segments for type slug and view slug.

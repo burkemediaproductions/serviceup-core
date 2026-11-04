@@ -6,7 +6,6 @@ const required = [
   'DATABASE_URL',
   'JWT_SECRET',
   'SUPABASE_URL',
-  'SUPABASE_SERVICE_ROLE_KEY',
   'SERVICEUP_CREDENTIALS_KEY',
 ];
 
@@ -21,6 +20,12 @@ for (const name of required) {
   const value = process.env[name];
   report(Boolean(value && !/replace|your-/i.test(value)), name, value ? 'configured' : 'missing');
 }
+const supabaseSecret = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+report(
+  Boolean(supabaseSecret && !/replace|your-/i.test(supabaseSecret)),
+  'SUPABASE_SECRET_KEY',
+  supabaseSecret ? 'configured' : 'missing',
+);
 
 if (SERVICEUP_MODE === 'shared') {
   report(Boolean(process.env.SERVICEUP_PLATFORM_ADMINS), 'SERVICEUP_PLATFORM_ADMINS');
