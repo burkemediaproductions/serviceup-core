@@ -78,6 +78,92 @@ async function backupTenant(db, tenant) {
   return { format: 'serviceup-tenant-export/v1', exported_at: new Date().toISOString(), tenant, content_types, content_fields, entries, taxonomies, terms, menus, entry_views, list_views, settings, dashboard_layouts };
 }
 
+// Older ServiceUp exports used the database-shaped `serviceup-tenant-export/v1`
+// format, while Import expects the portable migration shape. Normalize those
+// exports so a file downloaded from Import & Export can be uploaded again.
+function normalizeManifest(input = {}) {
+  if (input?.format !== 'serviceup-tenant-export/v1') return input;
+
+  const types = list(input.content_types);
+  const typeSlugById = new Map(types.map((type) => [type.id, text(type.slug)]));
+  const termsByTaxonomy = new Map();
+  for (const term of list(input.terms)) {
+    const values = termsByTaxonomy.get(term.taxonomy_id) || [];
+    values.push({ name: term.name, slug: term.slug, description: term.description, image: term.image, seo: term.seo });
+    termsByTaxonomy.set(term.taxonomy_id, values);
+  }
+
+  return {
+    format: FORMAT,
+    exported_at: input.exported_at,
+    tenant_slug: text(input.tenant?.slug),
+    source: { site: 'ServiceUp tenant export' },
+    content_types: types.map((type) => ({
+      slug: type.slug,
+      singular: type.label_singular || type.name,
+      plural: type.label_plural || type.name,
+      type: type.type,
+      description: type.description,
+      icon: type.icon,
+      fields: list(input.content_fields)
+        .filter((field) => field.content_type_id === type.id)
+        .map((field) => ({
+          key: field.field_key,
+          label: field.label,
+          type: field.type,
+          required: field.required,
+          help_text: field.help_text,
+          order_index: field.order_index,
+          config: field.config || {},
+        })),
+    })),
+    entries: list(input.entries).map((entry) => ({
+      content_type_slug: typeSlugById.get(entry.content_type_id),
+      title: entry.title,
+      slug: entry.slug,
+      status: entry.status,
+      data: entry.data || {},
+    })),
+    taxonomies: list(input.taxonomies).map((taxonomy) => ({
+      slug: taxonomy.slug,
+      label: taxonomy.label,
+      is_hierarchical: taxonomy.is_hierarchical,
+      terms: termsByTaxonomy.get(taxonomy.id) || [],
+    })),
+    menus: list(input.menus).map((menu) => ({
+      label: menu.label,
+      slug: menu.slug,
+      items: list(menu.config?.items),
+    })),
+    entry_views: list(input.entry_views).map((view) => ({
+      content_type_slug: typeSlugById.get(view.content_type_id),
+      slug: view.slug,
+      label: view.label,
+      roles: view.config?.roles || (view.role ? [view.role] : []),
+      default_roles: view.config?.default_roles || (view.is_default && view.role ? [view.role] : []),
+      core: view.config?.core || {},
+      sections: view.config?.sections || view.config?.widgets || [],
+    })),
+    list_views: list(input.list_views).map((view) => ({
+      content_type_slug: typeSlugById.get(view.content_type_id),
+      slug: view.slug,
+      label: view.label,
+      roles: view.config?.roles || (view.role ? [view.role] : []),
+      default_roles: view.config?.default_roles || (view.is_default && view.role ? [view.role] : []),
+      config: view.config || {},
+    })),
+    dashboard: {
+      settings: input.settings || {},
+      navigation: list(input.settings?.navSidebar).map((item) => ({
+        label: item.label,
+        url: item.to || item.url,
+        roles: item.roles || [],
+      })),
+      widgets: [],
+    },
+  };
+}
+
 async function conflicts(db, manifest) {
   const typeSlugs = list(manifest.content_types).map((item) => text(item.slug)).filter(Boolean);
   const menuSlugs = list(manifest.menus).map((item) => text(item.slug)).filter(Boolean);
@@ -88,7 +174,7 @@ async function conflicts(db, manifest) {
 
 router.post('/validate', guard, async (req, res) => {
   try {
-    const manifest = req.body?.manifest;
+    const manifest = normalizeManifest(req.body?.manifest);
     const result = validate(manifest, req.tenant);
     const found = result.errors.length ? { existing_content_types: [], existing_menus: [] } : await conflicts(req.db, manifest);
     return res.status(result.errors.length ? 400 : 200).json({ ok: !result.errors.length, tenant: req.tenant, summary: summarize(manifest), conflicts: found, available_sections: SECTIONS, ...result });
@@ -99,7 +185,7 @@ router.post('/validate', guard, async (req, res) => {
 });
 
 router.get('/export', guard, async (req, res) => {
-  try { return res.json(await backupTenant(req.db, req.tenant)); }
+  try { return res.json(normalizeManifest(await backupTenant(req.db, req.tenant))); }
   catch (error) { console.error('[tenant-transfer export]', error); return res.status(500).json({ error: 'Could not export this tenant.' }); }
 });
 
@@ -118,7 +204,7 @@ router.get('/backups/:id', guard, async (req, res) => {
 });
 
 router.post('/import', guard, async (req, res) => {
-  const manifest = req.body?.manifest;
+  const manifest = normalizeManifest(req.body?.manifest);
   const dryRun = req.body?.dry_run !== false;
   const requested = list(req.body?.sections);
   const selected = (requested.length ? requested : SECTIONS).filter((section) => SECTIONS.includes(section));

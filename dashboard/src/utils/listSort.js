@@ -10,6 +10,12 @@ function isEmpty(value) {
 }
 
 function comparable(value) {
+  // ServiceUp datetime and time fields use structured values. Normalize them
+  // before comparing so list views can sort these fields chronologically.
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    if (value.utc) return comparable(value.utc);
+    if (value.time) return comparable(value.time);
+  }
   if (typeof value === 'number') return { kind: 'number', value };
   if (typeof value === 'boolean') return { kind: 'number', value: value ? 1 : 0 };
   const text = String(value).trim();

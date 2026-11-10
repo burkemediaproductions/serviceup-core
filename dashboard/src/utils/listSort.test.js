@@ -30,3 +30,14 @@ test('sortRows preserves API order when a view has no sort rule', () => {
   const rows = [{ title: 'B' }, { title: 'A' }];
   assert.deepEqual(sortRows(rows, null), rows);
 });
+
+test('sortRows supports structured ServiceUp datetime values', () => {
+  const rows = [
+    { title: 'Older', data: { published_at: { utc: '2026-11-10T15:01:00.000Z', sourceTZ: 'America/Los_Angeles' } } },
+    { title: 'Newer', data: { published_at: { utc: '2026-11-10T15:02:00.000Z', sourceTZ: 'America/Los_Angeles' } } },
+  ];
+  assert.deepEqual(
+    sortRows(rows, { field: 'published_at', direction: 'desc' }).map((row) => row.title),
+    ['Newer', 'Older'],
+  );
+});
