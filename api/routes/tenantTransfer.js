@@ -86,6 +86,11 @@ function normalizeManifest(input = {}) {
 
   const types = list(input.content_types);
   const typeSlugById = new Map(types.map((type) => [type.id, text(type.slug)]));
+  const dashboardLayouts = list(input.dashboard_layouts);
+  const dashboardLayout = [...dashboardLayouts]
+    .sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime())
+    .find((row) => row.user_id || String(row.role || '').toUpperCase() === 'ADMIN')
+    || dashboardLayouts[0];
   const termsByTaxonomy = new Map();
   for (const term of list(input.terms)) {
     const values = termsByTaxonomy.get(term.taxonomy_id) || [];
@@ -159,7 +164,7 @@ function normalizeManifest(input = {}) {
         url: item.to || item.url,
         roles: item.roles || [],
       })),
-      widgets: [],
+      widgets: list(dashboardLayout?.layout),
     },
   };
 }

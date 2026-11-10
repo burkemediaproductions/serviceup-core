@@ -250,8 +250,8 @@ export default function DashboardPage() {
           <div className="su-dashboard-add__header">
             <h2>Add Widget</h2>
             <p>
-              Choose a widget type to add to the {currentRole.toLowerCase()}{" "}
-              dashboard.
+              Choose a widget type to add to the team dashboard. Widget role
+              visibility determines which team members see it.
             </p>
           </div>
           <div className="su-dashboard-add__types">
