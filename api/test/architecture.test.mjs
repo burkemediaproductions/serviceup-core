@@ -11,6 +11,15 @@ test('Widget remains dashboard-only', () => {
   assert.equal(fs.existsSync(path.join(root, 'api/routes/widgets.js')), false);
   assert.equal(fs.existsSync(path.join(root, 'api/routes/publicWidgets.js')), false);
 });
+test('dashboard uses one canonical team route and exposes widget role visibility', () => {
+  const extraRoutes = read('api/extra-routes.js');
+  const dashboardRoute = read('api/routes/dashboard.js');
+  const dashboardPage = read('dashboard/src/pages/Dashboards/index.jsx');
+  assert.doesNotMatch(extraRoutes, /app\.(get|post)\('\/api\/dashboard'/);
+  assert.match(dashboardRoute, /DEFAULT_DASHBOARD_ROLES/);
+  assert.match(dashboardRoute, /DELETE FROM dashboard_layouts WHERE user_id IS NOT NULL/);
+  assert.match(dashboardPage, /Visible to roles/);
+});
 test('tenant migrations cover Profile and Pixels', () => {
   const migration = read('db/002_multitenancy.sql');
   assert.match(migration, /'pixels'/); assert.match(migration, /'organization_profiles'/);

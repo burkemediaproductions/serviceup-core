@@ -49,7 +49,7 @@ export function useDashboard() {
     }
   }
 
-  async function persist(nextLayout) {
+  async function persist(nextLayout, previousLayout) {
     setSaving(true);
     setError("");
     try {
@@ -57,30 +57,34 @@ export function useDashboard() {
     } catch (e) {
       console.error("[useDashboard] Failed to save layout", e);
       setError(e?.message || "Failed to save dashboard layout");
+      setWidgets(previousLayout);
     } finally {
       setSaving(false);
     }
   }
 
   function addWidget(definition) {
+    const previous = widgets;
     const id = definition.id || `${definition.type}-${Date.now()}`;
     const next = [...widgets, { ...definition, id }];
     setWidgets(next);
-    void persist(next);
+    void persist(next, previous);
   }
 
   function updateWidget(id, patch) {
+    const previous = widgets;
     const next = widgets.map((w) =>
       w.id === id ? { ...w, ...patch, config: { ...w.config, ...patch.config } } : w
     );
     setWidgets(next);
-    void persist(next);
+    void persist(next, previous);
   }
 
   function removeWidget(id) {
+    const previous = widgets;
     const next = widgets.filter((w) => w.id !== id);
     setWidgets(next);
-    void persist(next);
+    void persist(next, previous);
   }
 
   useEffect(() => {

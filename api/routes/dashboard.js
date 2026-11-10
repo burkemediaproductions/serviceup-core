@@ -39,13 +39,20 @@ router.get("/", async (req, res) => {
         ORDER BY updated_at DESC
         LIMIT 1`
     );
+    const legacySettingsRes = await req.db.query(
+      `SELECT layout, updated_at
+         FROM dashboard_settings
+        WHERE id = 'ADMIN'
+        LIMIT 1`
+    );
 
     const roleRow = roleRes.rows[0];
     const legacyRow = legacyRes.rows[0];
-    const useLegacy = legacyRow && (
-      !roleRow || new Date(legacyRow.updated_at).getTime() > new Date(roleRow.updated_at).getTime()
-    );
-    const layout = useLegacy ? legacyRow.layout : roleRow?.layout;
+    const legacySettingsRow = legacySettingsRes.rows[0];
+    const newest = [roleRow, legacyRow, legacySettingsRow]
+      .filter(Boolean)
+      .sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime())[0];
+    const layout = newest?.layout;
 
     return res.json(layoutForRole(layout, role));
   } catch (err) {
@@ -85,6 +92,7 @@ router.post("/", async (req, res) => {
     // Personal dashboard editing was never exposed to non-admins. Remove old
     // overrides after promoting the latest admin layout to the team layouts.
     await req.db.query("DELETE FROM dashboard_layouts WHERE user_id IS NOT NULL");
+    await req.db.query("DELETE FROM dashboard_settings");
     await req.db.query("RELEASE SAVEPOINT dashboard_team_save");
 
     return res.json(layoutForRole(layout, "ADMIN"));

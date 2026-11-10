@@ -75,7 +75,8 @@ async function backupTenant(db, tenant) {
   const list_views = ids.length ? (await db.query('select * from entry_list_views where content_type_id=any($1::uuid[]) order by content_type_id, slug', [ids])).rows : [];
   const settings = (await db.query("select value from app_settings where key='global' limit 1")).rows[0]?.value || {};
   const dashboard_layouts = (await db.query('select * from dashboard_layouts order by role nulls last, user_id nulls last')).rows;
-  return { format: 'serviceup-tenant-export/v1', exported_at: new Date().toISOString(), tenant, content_types, content_fields, entries, taxonomies, terms, menus, entry_views, list_views, settings, dashboard_layouts };
+  const dashboard_settings = (await db.query('select * from dashboard_settings order by updated_at desc')).rows;
+  return { format: 'serviceup-tenant-export/v1', exported_at: new Date().toISOString(), tenant, content_types, content_fields, entries, taxonomies, terms, menus, entry_views, list_views, settings, dashboard_layouts, dashboard_settings };
 }
 
 // Older ServiceUp exports used the database-shaped `serviceup-tenant-export/v1`
@@ -87,10 +88,15 @@ function normalizeManifest(input = {}) {
   const types = list(input.content_types);
   const typeSlugById = new Map(types.map((type) => [type.id, text(type.slug)]));
   const dashboardLayouts = list(input.dashboard_layouts);
-  const dashboardLayout = [...dashboardLayouts]
+  const legacyDashboardLayouts = list(input.dashboard_settings).map((row) => ({
+    ...row,
+    role: row.id,
+  }));
+  const dashboardLayout = [...dashboardLayouts, ...legacyDashboardLayouts]
     .sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime())
     .find((row) => row.user_id || String(row.role || '').toUpperCase() === 'ADMIN')
-    || dashboardLayouts[0];
+    || dashboardLayouts[0]
+    || legacyDashboardLayouts[0];
   const termsByTaxonomy = new Map();
   for (const term of list(input.terms)) {
     const values = termsByTaxonomy.get(term.taxonomy_id) || [];

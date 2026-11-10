@@ -92,53 +92,5 @@ export default function mountExtraRoutes(app) {
     });
   });
 
-  // ---------------- Role-based dashboard layout ----------------
-  // GET the layout for the current user's role
-  app.get('/api/dashboard', authMiddleware, async (req, res) => {
-    try {
-      const role = (req.user?.role || 'VIEWER').toUpperCase();
-
-      const { rows } = await req.db.query(
-        'select layout from dashboard_settings where id = $1 limit 1',
-        [role]
-      );
-
-      if (!rows.length || !rows[0].layout) {
-        return res.json({ layout: [] }); // no layout yet for this role
-      }
-
-      res.json({ layout: rows[0].layout });
-    } catch (err) {
-      console.error('[GET /api/dashboard]', err);
-      res.status(500).json({ error: 'Failed to load dashboard layout' });
-    }
-  });
-
-  // SAVE the layout for the current user's role
-  app.post('/api/dashboard', authMiddleware, async (req, res) => {
-    try {
-      const role = (req.user?.role || 'VIEWER').toUpperCase();
-      const layout = req.body?.layout || [];
-      const json = JSON.stringify(layout);
-
-      const { rows } = await req.db.query(
-        `
-        insert into dashboard_settings (tenant_id, id, layout)
-        values ($1, $2, $3)
-        on conflict (tenant_id, id) do update
-          set layout = excluded.layout,
-              updated_at = now()
-        returning id, layout, updated_at
-      `,
-        [req.tenantId, role, json]
-      );
-
-      res.json(rows[0]);
-    } catch (err) {
-      console.error('[POST /api/dashboard]', err);
-      res.status(500).json({ error: 'Failed to save dashboard layout' });
-    }
-  });
-
   // (Add any future extra routes here, inside this function)
 }
