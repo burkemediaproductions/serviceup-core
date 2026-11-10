@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool } from './dbPool.js';
 import { supabaseAdmin } from './lib/supabaseAdmin.js';
+import { scheduleSiteRebuild } from './lib/sitePublisher.js';
 import {
   resolveTenant,
   tenantDatabaseSession,
@@ -668,6 +669,7 @@ app.post('/api/content/:slug', authMiddleware, async (req, res) => {
     );
 
     await attachResolvedUsersToEntries(req.db, req.tenantId, typeId, rows[0]);
+    scheduleSiteRebuild(req.tenant, `created ${typeSlug}/${finalSlug}`);
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error('[POST /api/content/:slug] error', err);
@@ -784,6 +786,7 @@ app.put('/api/content/:slug/:id', authMiddleware, async (req, res) => {
     if (!updated.rows.length) return res.status(404).json({ error: 'Entry not found' });
 
     await attachResolvedUsersToEntries(req.db, req.tenantId, typeId, updated.rows[0]);
+    scheduleSiteRebuild(req.tenant, `updated ${typeSlug}/${finalSlug}`);
     res.json(updated.rows[0]);
   } catch (err) {
     console.error('[PUT /api/content/:slug/:id] error', err);
@@ -838,6 +841,7 @@ app.delete('/api/content/:slug/:id', authMiddleware, async (req, res) => {
       if (!del.rows.length) return res.status(404).json({ error: 'Not found' });
     }
 
+    scheduleSiteRebuild(req.tenant, `deleted ${slug}/${id}`);
     res.json({ ok: true });
   } catch (err) {
     console.error('[DELETE /api/content/:slug/:id]', err);
@@ -851,6 +855,7 @@ app.delete('/api/content/:id', authMiddleware, async (req, res) => {
     await req.db.query('DELETE FROM entry_versions WHERE entry_id = $1', [id]);
     const del = await req.db.query('DELETE FROM entries WHERE id = $1 RETURNING id', [id]);
     if (!del.rows.length) return res.status(404).json({ error: 'Not found' });
+    scheduleSiteRebuild(req.tenant, `deleted entry ${id}`);
     res.json({ ok: true });
   } catch (err) {
     console.error('[DELETE /api/content/:id]', err);
