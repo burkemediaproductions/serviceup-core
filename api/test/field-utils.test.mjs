@@ -21,3 +21,30 @@ test('normalizeUrl rejects unsafe or malformed explicit schemes', () => {
   assert.equal(normalizeUrl('data:text/html,test'), '');
   assert.equal(normalizeUrl('https://'), '');
 });
+
+test('normalizeUrl preserves structured Content and Custom link values', () => {
+  assert.deepEqual(normalizeUrl({
+    type: 'content',
+    source_kind: 'content_type',
+    source_id: 'type-id',
+    source_slug: 'pages',
+    item_id: 'page-id',
+    item_slug: 'about',
+    url: '/about/',
+    target: '_blank',
+  }), {
+    type: 'content',
+    source_kind: 'content_type',
+    source_id: 'type-id',
+    source_slug: 'pages',
+    item_id: 'page-id',
+    item_slug: 'about',
+    url: '/about/',
+    target: '_blank',
+  });
+  assert.deepEqual(normalizeUrl({ type: 'custom', url: 'example.com', target: '_self' }), {
+    type: 'custom',
+    url: 'https://example.com/',
+    target: '_self',
+  });
+});

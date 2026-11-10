@@ -14,6 +14,24 @@ export function normalizePhoneE164(raw, def='US') {
 
 export function normalizeUrl(raw) {
   if (!raw) return '';
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    const url = normalizeUrl(raw.url ?? raw.href ?? '');
+    if (!url || typeof url !== 'string') return '';
+    const type = raw.type === 'content' ? 'content' : 'custom';
+    const target = raw.target === '_blank' ? '_blank' : '_self';
+    if (type === 'custom') return { type, url, target };
+    const sourceKind = raw.source_kind === 'taxonomy' ? 'taxonomy' : 'content_type';
+    return {
+      type,
+      source_kind: sourceKind,
+      source_id: String(raw.source_id || ''),
+      source_slug: String(raw.source_slug || ''),
+      item_id: String(raw.item_id || ''),
+      item_slug: String(raw.item_slug || ''),
+      url,
+      target,
+    };
+  }
   const s = String(raw).trim();
 
   // Site-local links, page anchors, and query links must remain relative so

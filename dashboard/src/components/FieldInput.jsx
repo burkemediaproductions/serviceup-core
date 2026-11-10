@@ -16,6 +16,7 @@ import {
   resolveBucketName,
 } from "../lib/storage";
 import { api } from "../lib/api";
+import { linkHref } from "../lib/links";
 
 /** ---------- Helpers ---------- */
 
@@ -95,6 +96,179 @@ function PixelPicker({ open, onClose, onSelect, mimePrefix = '' }) {
   useEffect(() => { if (open) api.get(`/api/pixels${mimePrefix ? `?mime=${encodeURIComponent(mimePrefix)}` : ''}`).then(setItems).catch(() => setItems([])); }, [open, mimePrefix]);
   const visible = items.filter((item) => !query || `${item.title} ${item.original_name}`.toLowerCase().includes(query.toLowerCase()));
   return <Modal open={open} onClose={onClose} title="Choose from Pixels"><div style={{padding:16}}><input className="su-input" type="search" placeholder="Search Pixels" value={query} onChange={(e)=>setQuery(e.target.value)}/><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:12,marginTop:14}}>{visible.map((pixel)=><button type="button" className="su-card" key={pixel.id} onClick={()=>onSelect(pixel)} style={{padding:10,textAlign:'left'}}>{pixel.public_url && pixel.mime_type?.startsWith('image/') ? <img src={pixel.public_url} alt="" style={{width:'100%',aspectRatio:'4/3',objectFit:'cover'}}/> : <div style={{fontSize:32,textAlign:'center'}}>📄</div>}<strong>{pixel.title}</strong></button>)}</div></div></Modal>;
+}
+
+function linkValue(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return {
+      type: value.type === "content" ? "content" : "custom",
+      source_kind: value.source_kind || "content_type",
+      source_id: value.source_id || "",
+      source_slug: value.source_slug || "",
+      item_id: value.item_id || "",
+      item_slug: value.item_slug || "",
+      url: linkHref(value),
+      target: value.target === "_blank" ? "_blank" : "_self",
+    };
+  }
+  return { type: "custom", url: linkHref(value), target: "_self" };
+}
+
+function contentDestinationUrl(sourceKind, sourceSlug, itemSlug, cfg = {}) {
+  const cleanItem = String(itemSlug || "").replace(/^\/+|\/+$/g, "");
+  const cleanSource = String(sourceSlug || "").replace(/^\/+|\/+$/g, "");
+  const configured = String(cfg.contentPath || cfg.content_path || "").trim();
+  if (configured) {
+    return configured
+      .replace(/\{source\}/g, cleanSource)
+      .replace(/\{slug\}/g, cleanItem)
+      .replace(/\/{2,}/g, "/");
+  }
+  if (sourceKind === "content_type" && ["page", "pages"].includes(cleanSource.toLowerCase())) {
+    return `/${cleanItem}/`;
+  }
+  return `/${cleanSource}/${cleanItem}/`;
+}
+
+function LinkField({ value, onChange, field }) {
+  const cfg = getFieldConfig(field);
+  const current = linkValue(value);
+  const [sources, setSources] = useState([]);
+  const [items, setItems] = useState([]);
+  const [loadingSources, setLoadingSources] = useState(false);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    if (current.type !== "content") {
+      setLoadingSources(false);
+      return () => { alive = false; };
+    }
+    setLoadingSources(true);
+    Promise.all([api.get("/api/content-types"), api.get("/api/taxonomies")])
+      .then(([typesResult, taxResult]) => {
+        if (!alive) return;
+        const types = Array.isArray(typesResult) ? typesResult : [];
+        const taxes = taxResult?.taxonomies || [];
+        setSources([
+          ...types.filter((item) => !item.type || item.type === "content").map((item) => ({
+            kind: "content_type",
+            id: item.id,
+            slug: item.slug,
+            label: item.label_plural || item.label_singular || item.slug,
+          })),
+          ...taxes.map((item) => ({ kind: "taxonomy", id: item.id, slug: item.slug, label: item.label })),
+        ]);
+      })
+      .catch((err) => alive && setError(err?.message || "Could not load content choices."))
+      .finally(() => alive && setLoadingSources(false));
+    return () => { alive = false; };
+  }, [current.type]);
+
+  useEffect(() => {
+    let alive = true;
+    if (current.type !== "content" || !current.source_id) {
+      setItems([]);
+      return () => { alive = false; };
+    }
+    const source = sources.find((item) => item.id === current.source_id);
+    if (!source) return () => { alive = false; };
+    setLoadingItems(true);
+    setError("");
+    const request = source.kind === "taxonomy"
+      ? api.get(`/api/taxonomies/${encodeURIComponent(source.id)}/terms`)
+      : api.get(`/api/content/${encodeURIComponent(source.slug)}?limit=200`);
+    request
+      .then((result) => {
+        if (!alive) return;
+        const rows = source.kind === "taxonomy"
+          ? (result?.terms || [])
+          : (Array.isArray(result) ? result : result?.entries || result?.items || []);
+        setItems(rows);
+      })
+      .catch((err) => alive && setError(err?.message || "Could not load content items."))
+      .finally(() => alive && setLoadingItems(false));
+    return () => { alive = false; };
+  }, [current.type, current.source_id, sources]);
+
+  const updateTarget = (target) => onChange({ ...current, target });
+  const selectSource = (sourceId) => {
+    const source = sources.find((item) => item.id === sourceId);
+    onChange({
+      type: "content",
+      source_kind: source?.kind || "content_type",
+      source_id: source?.id || "",
+      source_slug: source?.slug || "",
+      item_id: "",
+      item_slug: "",
+      url: "",
+      target: current.target,
+    });
+  };
+  const selectItem = (itemId) => {
+    const item = items.find((candidate) => String(candidate.id) === String(itemId));
+    const source = sources.find((candidate) => candidate.id === current.source_id);
+    onChange({
+      ...current,
+      type: "content",
+      source_kind: source?.kind || current.source_kind,
+      source_slug: source?.slug || current.source_slug,
+      item_id: item?.id || "",
+      item_slug: item?.slug || "",
+      url: item ? contentDestinationUrl(source?.kind, source?.slug, item.slug, cfg) : "",
+    });
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        {[['content', 'Content'], ['custom', 'Custom']].map(([type, label]) => (
+          <label key={type} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <input type="radio" checked={current.type === type} onChange={() => onChange({ type, url: "", target: current.target, source_kind: "content_type", source_id: "", source_slug: "", item_id: "", item_slug: "" })} />
+            {label}
+          </label>
+        ))}
+      </div>
+
+      {current.type === "content" ? (
+        <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <label style={{ display: "grid", gap: 5 }}>
+            <span>Content type or taxonomy</span>
+            <select value={current.source_id} onChange={(e) => selectSource(e.target.value)} disabled={loadingSources}>
+              <option value="">{loadingSources ? "Loading…" : "Choose…"}</option>
+              {sources.map((source) => <option key={`${source.kind}:${source.id}`} value={source.id}>{source.label}</option>)}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: 5 }}>
+            <span>Content</span>
+            <select value={current.item_id} onChange={(e) => selectItem(e.target.value)} disabled={!current.source_id || loadingItems}>
+              <option value="">{loadingItems ? "Loading…" : "Choose…"}</option>
+              {items.map((item) => <option key={item.id} value={item.id}>{item.title || item.name || item.slug}</option>)}
+            </select>
+          </label>
+        </div>
+      ) : (
+        <input
+          type="text"
+          inputMode="url"
+          value={current.url}
+          placeholder="/about/ or https://example.com"
+          onChange={(e) => onChange({ type: "custom", url: e.target.value, target: current.target })}
+        />
+      )}
+
+      <label style={{ display: "grid", gap: 5, maxWidth: 260 }}>
+        <span>Open link in</span>
+        <select value={current.target} onChange={(e) => updateTarget(e.target.value)}>
+          <option value="_self">Same tab</option>
+          <option value="_blank">New tab</option>
+        </select>
+      </label>
+      {current.url ? <small style={{ opacity: 0.72 }}>Link: {current.url}</small> : null}
+      {error ? <small style={{ color: "var(--su-danger, #b42318)" }}>{error}</small> : null}
+    </div>
+  );
 }
 
 // Normalize choices to array of { value, label }
@@ -2788,15 +2962,7 @@ export default function FieldInput({
   }
 
   if (fieldType === "url") {
-    return (
-      <input
-        type="text"
-        inputMode="url"
-        value={value ?? ""}
-        placeholder="/about/ or https://example.com"
-        onChange={(e) => onChange(e.target.value)}
-      />
-    );
+    return <LinkField field={field} value={value} onChange={onChange} />;
   }
 
   if (fieldType === "textarea") {

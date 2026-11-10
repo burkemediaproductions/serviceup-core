@@ -24,5 +24,14 @@ export function isSafeLink(raw) {
 }
 
 export function isExternalLink(raw) {
-  return /^https?:\/\//i.test(String(raw ?? '').trim());
+  return /^https?:\/\//i.test(linkHref(raw));
+}
+
+export function linkHref(value) {
+  const raw = value && typeof value === 'object' ? (value.url ?? value.href) : value;
+  return normalizeLink(raw);
+}
+
+export function linkTarget(value) {
+  return value && typeof value === 'object' && value.target === '_blank' ? '_blank' : '_self';
 }

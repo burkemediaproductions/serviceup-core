@@ -42,6 +42,31 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/taxonomies/:id/terms
+// Supplies the shared Link field with tenant-scoped taxonomy destinations.
+router.get('/:id/terms', async (req, res) => {
+  try {
+    const taxonomy = await req.db.query(
+      `SELECT id, slug, label FROM taxonomies WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      [req.params.id, req.tenantId],
+    );
+    if (!taxonomy.rows.length) {
+      return res.status(404).json({ ok: false, error: 'Taxonomy not found.' });
+    }
+    const { rows } = await req.db.query(
+      `SELECT id, taxonomy_id, parent_id, name, slug, description
+       FROM terms
+       WHERE taxonomy_id = $1 AND tenant_id = $2
+       ORDER BY name ASC`,
+      [req.params.id, req.tenantId],
+    );
+    res.json({ ok: true, taxonomy: taxonomy.rows[0], terms: rows });
+  } catch (err) {
+    console.error('[GET /api/taxonomies/:id/terms] error', err);
+    res.status(500).json({ ok: false, error: 'Failed to load taxonomy terms', detail: err.message });
+  }
+});
+
 // POST /api/taxonomies
 router.post('/', async (req, res) => {
   const { slug, label, is_hierarchical, isHierarchical } = req.body || {};
