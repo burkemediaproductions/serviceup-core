@@ -65,6 +65,10 @@ export default function ListViewsSettings() {
   const [titleMode, setTitleMode] = useState('manual'); // manual | field | template
   const [titleFieldKey, setTitleFieldKey] = useState('');
   const [titleTemplate, setTitleTemplate] = useState('');
+  const [sortField, setSortField] = useState('');
+  const [sortDirection, setSortDirection] = useState('desc');
+  const [secondarySortField, setSecondarySortField] = useState('');
+  const [secondarySortDirection, setSecondarySortDirection] = useState('desc');
 
   const [availableFields, setAvailableFields] = useState([]);
 
@@ -82,6 +86,14 @@ export default function ListViewsSettings() {
   // Default roles for this view. A view can be default for multiple
   // roles. When saving, this array is passed as `default_roles`.
   const [defaultRoles, setDefaultRoles] = useState([]);
+
+  const applySortConfig = (view) => {
+    const sort = view?.config?.sort || {};
+    setSortField(String(sort.field || ''));
+    setSortDirection(sort.direction === 'asc' ? 'asc' : 'desc');
+    setSecondarySortField(String(sort.secondaryField || ''));
+    setSecondarySortDirection(sort.secondaryDirection === 'asc' ? 'asc' : 'desc');
+  };
 
   // ---------------------------------------------
   // Sync stage and selection from the URL params
@@ -265,6 +277,7 @@ export default function ListViewsSettings() {
       setTitleMode('manual');
       setTitleFieldKey('');
       setTitleTemplate('');
+          applySortConfig(null);
           setDirty(false);
         } else {
           // Pick default or first view
@@ -309,6 +322,7 @@ export default function ListViewsSettings() {
           setTitleMode(String(tCfg.mode || "manual"));
           setTitleFieldKey(String(tCfg.fieldKey || ""));
           setTitleTemplate(String(tCfg.template || ""));
+          applySortConfig(def);
         }
       } catch (err) {
         console.error("[ListViews] load views error", err);
@@ -382,6 +396,7 @@ export default function ListViewsSettings() {
       ];
       setColumns(defaultCols);
     }
+    applySortConfig(v);
     setDirty(false);
     setSaveMessage("");
     setError("");
@@ -405,6 +420,7 @@ export default function ListViewsSettings() {
     setIsDefault(false);
     setAssignedRoles([role]);
     setDefaultRoles([role]);
+    applySortConfig(null);
 
     if (!columns || !columns.length) {
       const defaultCols = [
@@ -597,7 +613,16 @@ export default function ListViewsSettings() {
         label,
         roles: rolesArray,
         default_roles: effectiveDefaultRoles,
-        config: { columns, title: { label: titleLabel, mode: titleMode, fieldKey: titleFieldKey, template: titleTemplate } },
+        config: {
+          columns,
+          title: { label: titleLabel, mode: titleMode, fieldKey: titleFieldKey, template: titleTemplate },
+          sort: {
+            field: sortField,
+            direction: sortDirection,
+            secondaryField: secondarySortField,
+            secondaryDirection: secondarySortDirection,
+          },
+        },
       };
       // Send a single PUT request with all roles and default roles
       await api.put(
@@ -644,6 +669,7 @@ export default function ListViewsSettings() {
                 { key: 'updated_at', label: 'Updated' },
               ];
           setColumns(cfgCols);
+          applySortConfig(next);
         } else {
           // fallback to default layout
           setActiveViewSlug('default');
@@ -656,6 +682,7 @@ export default function ListViewsSettings() {
             { key: 'status', label: 'Status' },
             { key: 'updated_at', label: 'Updated' },
           ]);
+          applySortConfig(null);
         }
       } catch (reloadErr) {
         console.error('[ListViews] reload after save error', reloadErr);
@@ -674,6 +701,12 @@ export default function ListViewsSettings() {
               roles: rolesArray,
               default_roles: effectiveDefaultRoles,
               columns,
+              sort: {
+                field: sortField,
+                direction: sortDirection,
+                secondaryField: secondarySortField,
+                secondaryDirection: secondarySortDirection,
+              },
             },
           });
           return nextList;
@@ -734,6 +767,7 @@ export default function ListViewsSettings() {
           { key: 'status', label: 'Status' },
           { key: 'updated_at', label: 'Updated' },
         ]);
+        applySortConfig(null);
         setDirty(false);
         bumpListViewsVersion(); // ✅ notify others
         navigate(`/admin/settings/list-views/${selectedTypeId}`);
@@ -760,6 +794,7 @@ export default function ListViewsSettings() {
               { key: 'updated_at', label: 'Updated' },
             ];
         setColumns(cfgCols);
+        applySortConfig(first);
         bumpListViewsVersion(); // ✅ notify others
         navigate(`/admin/settings/list-views/${selectedTypeId}/${first.slug}`);
       }
@@ -1099,6 +1134,80 @@ export default function ListViewsSettings() {
             </div>
           </div>
 
+          <div className="su-card">
+            <div className="su-card-header">
+              <h2 className="su-card-title">Sort order</h2>
+              <p className="su-card-subtitle">
+                Choose the default order for entries using this view.
+              </p>
+            </div>
+            <div className="su-card-body">
+              <div className="su-grid su-gap-sm">
+                <label className="su-label">
+                  Sort by
+                  <select
+                    className="su-select"
+                    value={sortField}
+                    onChange={(e) => { setSortField(e.target.value); setDirty(true); }}
+                  >
+                    <option value="">Use API/default order</option>
+                    {availableFields.map((field) => (
+                      <option key={field.key} value={field.key}>
+                        {field.label || field.name || field.key}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="su-label">
+                  Direction
+                  <select
+                    className="su-select"
+                    value={sortDirection}
+                    disabled={!sortField}
+                    onChange={(e) => { setSortDirection(e.target.value); setDirty(true); }}
+                  >
+                    <option value="asc">Ascending — A–Z / oldest first</option>
+                    <option value="desc">Descending — Z–A / newest first</option>
+                  </select>
+                </label>
+
+                <label className="su-label">
+                  Then by <span className="su-text-muted">(optional)</span>
+                  <select
+                    className="su-select"
+                    value={secondarySortField}
+                    disabled={!sortField}
+                    onChange={(e) => { setSecondarySortField(e.target.value); setDirty(true); }}
+                  >
+                    <option value="">No secondary sort</option>
+                    {availableFields.filter((field) => field.key !== sortField).map((field) => (
+                      <option key={field.key} value={field.key}>
+                        {field.label || field.name || field.key}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="su-label">
+                  Secondary direction
+                  <select
+                    className="su-select"
+                    value={secondarySortDirection}
+                    disabled={!sortField || !secondarySortField}
+                    onChange={(e) => { setSecondarySortDirection(e.target.value); setDirty(true); }}
+                  >
+                    <option value="asc">Ascending — A–Z / oldest first</option>
+                    <option value="desc">Descending — Z–A / newest first</option>
+                  </select>
+                </label>
+                <small className="su-text-muted">
+                  Entries without a value for the selected field appear last.
+                </small>
+              </div>
+            </div>
+          </div>
+
           {/* Right: chosen columns */}
           <div className="su-card">
             <div className="su-card-header">
@@ -1172,6 +1281,12 @@ export default function ListViewsSettings() {
                 isDefault,
                 defaultRoles,
                 columns,
+                sort: {
+                  field: sortField,
+                  direction: sortDirection,
+                  secondaryField: secondarySortField,
+                  secondaryDirection: secondarySortDirection,
+                },
               },
               null,
               2

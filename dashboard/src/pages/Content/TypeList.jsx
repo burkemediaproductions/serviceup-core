@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 // ✅ NEW: list/widget display helper (handles repeaters, nested repeaters, etc.)
 import { formatFieldValueForList } from '../../components/FieldInput';
 import { isRichTextDocument, richTextToPlainText } from '../../components/RichTextContent';
+import { sortRows } from '../../utils/listSort';
 
 
 // ---------------------------------------------------------------------------
@@ -405,6 +406,11 @@ export default function TypeList() {
     return BUILTIN_KEYS;
   }, [columns]);
 
+  const displayRows = useMemo(
+    () => sortRows(rows, activeView?.config?.sort),
+    [rows, activeView],
+  );
+
   // ---------------------------------------------------------------------------
   // Navigation + view switching
   // ---------------------------------------------------------------------------
@@ -694,7 +700,7 @@ export default function TypeList() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => {
+                  {displayRows.map((row) => {
                     const id = row.id || row._id;
                     return (
                       <tr
