@@ -1,4 +1,5 @@
 import React from 'react';
+import { isExternalLink, normalizeLink } from '../lib/links';
 
 export function isRichTextDocument(value) {
   return !!(value && typeof value === 'object' && value.type === 'doc' && Array.isArray(value.content));
@@ -41,8 +42,12 @@ function TextNode({ node }) {
     if (mark.type === 'italic') content = <em>{content}</em>;
     if (mark.type === 'underline') content = <u>{content}</u>;
     if (mark.type === 'code') content = <code>{content}</code>;
-    if (mark.type === 'link' && /^https?:\/\//i.test(mark.attrs?.href || '')) {
-      content = <a href={mark.attrs.href} target="_blank" rel="noopener noreferrer">{content}</a>;
+    if (mark.type === 'link') {
+      const href = normalizeLink(mark.attrs?.href);
+      if (href) {
+        const external = isExternalLink(href);
+        content = <a href={href} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined}>{content}</a>;
+      }
     }
   }
   return content;

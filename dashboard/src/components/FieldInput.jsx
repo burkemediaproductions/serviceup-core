@@ -2790,9 +2790,10 @@ export default function FieldInput({
   if (fieldType === "url") {
     return (
       <input
-        type="url"
+        type="text"
+        inputMode="url"
         value={value ?? ""}
-        placeholder="https://example.com"
+        placeholder="/about/ or https://example.com"
         onChange={(e) => onChange(e.target.value)}
       />
     );

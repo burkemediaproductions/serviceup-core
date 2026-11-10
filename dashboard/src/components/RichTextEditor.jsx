@@ -4,6 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
+import { isExternalLink, isSafeLink, normalizeLink } from '../lib/links'
 
 function deepEqual(a, b) {
   try { return JSON.stringify(a) === JSON.stringify(b) } catch { return false }
@@ -23,12 +24,7 @@ export default function RichTextEditor({ value, onChange, options }) {
       Underline,
       Link.configure({
         openOnClick: false,
-        validate: href => {
-          try {
-            const u = new URL(href.startsWith('http') ? href : `https://${href}`)
-            return u.protocol === 'http:' || u.protocol === 'https:'
-          } catch { return false }
-        }
+        validate: isSafeLink,
       }),
     ],
     content: initialDoc,
@@ -54,14 +50,21 @@ export default function RichTextEditor({ value, onChange, options }) {
   const setLink = () => {
     if (typeof window === 'undefined') return
     const prev = editor.getAttributes('link').href || ''
-    const href = window.prompt('Link URL (https://…):', prev || 'https://')
+    const href = window.prompt('Link (/about/, #section, mailto:, tel:, or https://…):', prev)
     if (href === null) return
     if (href === '') {
       editor.chain().focus().unsetLink().run()
       return
     }
-    const normalized = href.startsWith('http://') || href.startsWith('https://') ? href : `https://${href}`
-    editor.chain().focus().setLink({ href: normalized, target: '_blank' }).run()
+    const normalized = normalizeLink(href)
+    if (!normalized) {
+      window.alert('Enter a valid internal path, anchor, email, phone, or web address.')
+      return
+    }
+    editor.chain().focus().setLink({
+      href: normalized,
+      target: isExternalLink(normalized) ? '_blank' : null,
+    }).run()
   }
 
   const Btn = ({ on, active, children, disabled }) => (

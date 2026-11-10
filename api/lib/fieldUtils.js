@@ -14,14 +14,33 @@ export function normalizePhoneE164(raw, def='US') {
 
 export function normalizeUrl(raw) {
   if (!raw) return '';
-  let s = String(raw).trim();
-  if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
-  let u;
-  try { u = new URL(s); } catch { return ''; }
-  u.protocol = 'https:';
-  u.hostname = u.hostname.toLowerCase();
-  if ((u.protocol === 'https:' && u.port === '443') || (u.protocol === 'http:' && u.port === '80')) u.port = '';
-  return u.toString();
+  const s = String(raw).trim();
+
+  // Site-local links, page anchors, and query links must remain relative so
+  // they continue to work across previews, staging, and production domains.
+  if (/^(?:\/|\.\/|\.\.\/|#|\?)/.test(s)) return s;
+
+  // These schemes are useful in buttons and panel fields. Reject every other
+  // explicit scheme (javascript:, data:, etc.).
+  if (/^(?:mailto|tel):/i.test(s)) return s;
+  if (/^[a-z][a-z\d+.-]*:/i.test(s) && !/^https?:\/\//i.test(s)) return '';
+
+  // Keep convenient domain-only input, while treating path-like input as a
+  // relative link rather than inventing an external hostname.
+  if (!/^https?:\/\//i.test(s)) {
+    if (/^[^\s/]+\.[^\s/]+(?:[/?#].*)?$/i.test(s)) return normalizeUrl(`https://${s}`);
+    return s;
+  }
+
+  try {
+    const u = new URL(s);
+    if (!['http:', 'https:'].includes(u.protocol)) return '';
+    u.hostname = u.hostname.toLowerCase();
+    if ((u.protocol === 'https:' && u.port === '443') || (u.protocol === 'http:' && u.port === '80')) u.port = '';
+    return u.toString();
+  } catch {
+    return '';
+  }
 }
 
 export function normalizeAddress(addr = {}, def='US') {
