@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { formatFieldValueForList } from '../../components/FieldInput';
 import { isRichTextDocument, richTextToPlainText } from '../../components/RichTextContent';
 import { sortRows } from '../../utils/listSort';
+import { previewAssetUrl } from '../../utils/previewAssets';
 
 
 // ---------------------------------------------------------------------------
@@ -496,7 +497,7 @@ export default function TypeList() {
         contentType.fields.find((f) => (f?.field_key || f?.key) === key) || null;
 
       if (fieldDef) {
-        const display = formatFieldValueForList(fieldDef, value);
+        const display = (fieldDef.type === 'image' && looksLikeImageKey(key)) ? '' : formatFieldValueForList(fieldDef, value);
         if (display !== '') return display;
       }
     }
@@ -505,7 +506,7 @@ export default function TypeList() {
 
     if (Array.isArray(value)) {
       if (looksLikeImageKey(key)) {
-        const url = getImageUrlFromValue(value);
+        const url = previewAssetUrl(getImageUrlFromValue(value), settings?.publicSiteOrigin);
         if (url) {
           return (
             <img
@@ -522,7 +523,7 @@ export default function TypeList() {
 
     if (value && typeof value === 'object') {
       if (looksLikeImageKey(key)) {
-        const url = getImageUrlFromValue(value);
+        const url = previewAssetUrl(getImageUrlFromValue(value), settings?.publicSiteOrigin);
         if (url) {
           return (
             <img
@@ -549,11 +550,11 @@ export default function TypeList() {
         return formatDate(value);
       }
 
-      if (looksLikeImageKey(key) && /^https?:\/\//i.test(value)) {
+      if (looksLikeImageKey(key) && previewAssetUrl(value, settings?.publicSiteOrigin)) {
         return (
           <img
-            src={value}
-            alt=""
+            src={previewAssetUrl(value, settings?.publicSiteOrigin)}
+            alt={row?.data?.alt || row?.title || ''}
             className="su-table-img-thumb"
             loading="lazy"
           />

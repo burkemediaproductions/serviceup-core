@@ -17,6 +17,8 @@ import {
 } from "../lib/storage";
 import { api } from "../lib/api";
 import { linkHref } from "../lib/links";
+import { useSettings } from "../context/SettingsContext";
+import { previewAssetUrl } from "../utils/previewAssets";
 
 /** ---------- Helpers ---------- */
 
@@ -1070,6 +1072,7 @@ function fieldFolder(field) {
  * Image upload UI (Supabase Storage)
  */
 function ImageField({ field, value, onChange, entryContext }) {
+  const { settings } = useSettings();
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const cfg = getFieldConfig(field);
@@ -1084,9 +1087,9 @@ function ImageField({ field, value, onChange, entryContext }) {
   const creditCfg = subCfg(field, "credit", "Credit");
 
   const imageUrl = useMemo(() => {
-    if (visibility === "public") return value?.publicUrl || null;
-    return null;
-  }, [value, visibility]);
+    if (visibility !== "public") return null;
+    return previewAssetUrl(value, settings?.publicSiteOrigin) || null;
+  }, [value, visibility, settings?.publicSiteOrigin]);
 
   async function handleUpload(e) {
     const file = e.target.files?.[0];
@@ -1124,7 +1127,7 @@ function ImageField({ field, value, onChange, entryContext }) {
         makePublic: visibility === "public",
       });
       onChange({
-        ...(value || {}),
+        ...(typeof value === "object" && value ? value : {}),
         ...meta,
         alt: value?.alt || "",
         title: value?.title || "",
@@ -1208,7 +1211,7 @@ function ImageField({ field, value, onChange, entryContext }) {
           </button>
         )}
       </div>
-      <PixelPicker open={pickerOpen} onClose={() => setPickerOpen(false)} mimePrefix="image/" onSelect={(pixel) => { onChange({ ...(value || {}), pixelId: pixel.id, bucket: pixel.bucket, path: pixel.storage_path, publicUrl: pixel.public_url, alt: pixel.alt_text || value?.alt || '', title: pixel.title, caption: pixel.caption || '' , mime: pixel.mime_type, size: pixel.size_bytes }); setPickerOpen(false); }} />
+      <PixelPicker open={pickerOpen} onClose={() => setPickerOpen(false)} mimePrefix="image/" onSelect={(pixel) => { onChange({ ...(typeof value === "object" && value ? value : {}), pixelId: pixel.id, bucket: pixel.bucket, path: pixel.storage_path, publicUrl: pixel.public_url, alt: pixel.alt_text || value?.alt || '', title: pixel.title, caption: pixel.caption || '' , mime: pixel.mime_type, size: pixel.size_bytes }); setPickerOpen(false); }} />
     </div>
   );
 }
@@ -2858,6 +2861,57 @@ function RelationEntryField({
   );
 }
 
+function TaxonomyDropdown({ taxonomySlug, value, onChange, valueMode = 'slug', fallbackChoices = [] }) {
+  const [choices, setChoices] = useState(normalizeChoices(fallbackChoices));
+  const [taxonomyId, setTaxonomyId] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const response = await api.get('/api/taxonomies');
+        const list = response?.taxonomies || response?.data?.taxonomies || [];
+        const match = list.find(item => item.slug === taxonomySlug);
+        if (!match) return;
+        const termsResponse = await api.get(`/api/taxonomies/${encodeURIComponent(match.id)}/terms`);
+        const terms = termsResponse?.terms || termsResponse?.data?.terms || [];
+        if (!active) return;
+        setTaxonomyId(match.id);
+        setChoices(terms.map(t => ({ value: valueMode === 'name' ? t.name : t.slug, label: t.name })));
+      } catch (err) { if (active) setError('Could not load live taxonomy terms; showing saved options.'); }
+    })();
+    return () => { active = false; };
+  }, [taxonomySlug, valueMode]);
+  async function addTerm() {
+    const name = newName.trim();
+    if (!name || !taxonomyId) return;
+    setError('');
+    try {
+      const slug = name.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      if (!slug) throw new Error('Please enter a valid name.');
+      const response = await api.post(`/api/taxonomies/${encodeURIComponent(taxonomyId)}/terms`, { name, slug });
+      const term = response?.term || response?.data?.term || {name,slug};
+      const option = { value: valueMode === 'name' ? term.name : term.slug, label: term.name };
+      setChoices(prev => [...prev.filter(item => String(item.value) !== String(option.value)),option].sort((a,b)=>a.label.localeCompare(b.label)));
+      onChange(option.value);setAdding(false);setNewName('');
+    } catch (err) { setError(err?.message || 'Could not add taxonomy term.'); }
+  }
+  const missing = value && !choices.some(option => String(option.value) === String(value));
+  return <div style={{display:'grid',gap:6}}>
+    <select value={value ?? ''} onChange={event => { if(event.target.value === '__add_term__') setAdding(true); else onChange(event.target.value); }}>
+      <option value="">Select…</option>
+      {missing && <option value={value}>{String(value)} (existing)</option>}
+      {choices.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+      {taxonomyId && <option value="__add_term__">+ Add a new term…</option>}
+    </select>
+    {adding && <div style={{display:'flex',gap:6,flexWrap:'wrap'}}><input aria-label="New term name" value={newName} placeholder="New term" onChange={event => setNewName(event.target.value)} /><button type="button" onClick={addTerm}>Add</button><button type="button" onClick={() => setAdding(false)}>Cancel</button></div>}
+    {error && <small role="status">{error}</small>}
+  </div>;
+}
+
+
 /**
  * FieldInput
  */
@@ -3012,6 +3066,7 @@ export default function FieldInput({
   }
 
   if (fieldType === "dropdown" || fieldType === "select") {
+    if (cfg.taxonomySlug) return <TaxonomyDropdown taxonomySlug={cfg.taxonomySlug} value={value} onChange={onChange} valueMode={cfg.taxonomyValue || 'slug'} fallbackChoices={getFieldChoices(field)} />;
     const baseChoices = isDynamic ? dynamicChoices : getFieldChoices(field);
     const choices = normalizeChoices(baseChoices);
     return (

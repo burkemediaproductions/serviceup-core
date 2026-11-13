@@ -67,6 +67,26 @@ router.get('/:id/terms', async (req, res) => {
   }
 });
 
+// POST /api/taxonomies/:id/terms — reusable term creation for taxonomy dropdowns.
+router.post('/:id/terms', async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  const slug = String(req.body?.slug || '').trim().toLowerCase();
+  if (!name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || name.length > 160) {
+    return res.status(400).json({ ok: false, error: 'A valid term name and slug are required.' });
+  }
+  try {
+    const found = await req.db.query('SELECT id FROM taxonomies WHERE id=$1 AND tenant_id=$2', [req.params.id,req.tenantId]);
+    if (!found.rows.length) return res.status(404).json({ ok: false, error: 'Taxonomy not found.' });
+    const result = await req.db.query(
+      'INSERT INTO terms (tenant_id,taxonomy_id,name,slug,description) VALUES ($1,$2,$3,$4,$5) RETURNING id,taxonomy_id,name,slug,description',
+      [req.tenantId, req.params.id, name, slug, '']);
+    return res.status(201).json({ ok:true, term: result.rows[0] });
+  } catch(err) {
+    if(err.code==='23505') return res.status(409).json({ok:false,error:'That term already exists.'});
+    console.error('[POST taxonomy term]',err);return res.status(500).json({ok:false,error:'Could not create taxonomy term.'});
+  }
+});
+
 // POST /api/taxonomies
 router.post('/', async (req, res) => {
   const { slug, label, is_hierarchical, isHierarchical } = req.body || {};
