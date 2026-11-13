@@ -579,7 +579,12 @@ export default function Editor() {
         if (res && res.ok === false) {
           throw new Error(res.error || res.detail || "Failed to load entry");
         }
-        const entry = res.entry || res.data || res;
+        // A raw API entry has top-level title/slug/status and a nested `data`.
+        // Never mistake that data payload for the entire entry (Pages do not
+        // repeat their title and slug inside `data`, unlike some other types).
+        const entry = res?.entry ||
+          (res && (res.id || res.slug || res.content_type_id) ? res : null) ||
+          res?.data || res;
         if (cancelled) return;
 
         setResolved(entry?._resolved || null);
@@ -735,7 +740,9 @@ export default function Editor() {
           throw new Error(res.error || res.detail || "Failed to save entry");
         }
 
-        const updated = res.entry || res.data || res;
+        const updated = res?.entry ||
+          (res && (res.id || res.slug || res.content_type_id) ? res : null) ||
+          res?.data || res;
         setResolved(updated?._resolved || null);
 
         if (updated) {

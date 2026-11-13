@@ -407,10 +407,33 @@ export default function TypeList() {
     return BUILTIN_KEYS;
   }, [columns]);
 
-  const displayRows = useMemo(
-    () => sortRows(rows, activeView?.config?.sort),
-    [rows, activeView],
-  );
+  // Optional per-view filters. Filters are configured in a list view, so a
+  // bookmarked `?view=...` URL and a tenant sidebar link return the same rows.
+  // Whitelisted operators only; no client-provided JavaScript or SQL.
+  const displayRows = useMemo(() => {
+    const specs = Array.isArray(activeView?.config?.filters)
+      ? activeView.config.filters : [];
+    const eligible = rows.filter((row) => specs.every((filter) => {
+      if (!filter || typeof filter.field !== 'string') return true;
+      const field = filter.field.trim();
+      if (!/^[a-zA-Z][\w]*(?:\.[a-zA-Z][\w]*)*$/.test(field)) return false;
+      const op = String(filter.op || 'eq').toLowerCase();
+      const path = field.split('.');
+      const from = (obj) => path.reduce((cur, key) => cur?.[key], obj);
+      const actual = from(row.data || {}) ?? from(row);
+      const expected = filter.value;
+      if (op === 'empty') return actual == null || actual === '';
+      if (op === 'not_empty') return actual != null && actual !== '';
+      const norm = (v) => String(v ?? '').trim().toLocaleLowerCase();
+      if (op === 'eq') return norm(actual) === norm(expected);
+      if (op === 'neq') return norm(actual) !== norm(expected);
+      if (op === 'contains') return norm(actual).includes(norm(expected));
+      if (op === 'in' && Array.isArray(expected))
+        return expected.some((v) => norm(actual) === norm(v));
+      return false;
+    }));
+    return sortRows(eligible, activeView?.config?.sort);
+  }, [rows, activeView]);
 
   // ---------------------------------------------------------------------------
   // Navigation + view switching
