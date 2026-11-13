@@ -302,6 +302,34 @@ button {
 .su-table { table-layout: auto; width: 100%; }
 .su-table td { max-width: 42rem; overflow-wrap: anywhere; word-break: break-word; }
 
+/* ServiceUp list-view image cells: never let media expand table rows.
+   Applies to every tenant and every image-backed content type. */
+.su-table-wrapper { max-width: 100%; overflow-x: auto; }
+.su-table .su-table-img-thumb {
+  display: block;
+  width: 76px;
+  height: 76px;
+  max-width: 76px;
+  max-height: 76px;
+  min-width: 0;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 6px;
+  background: var(--su-control-bg);
+}
+.su-table td:has(> .su-table-img-thumb) {
+  width: 92px;
+  min-width: 92px;
+  max-width: 92px;
+  padding: 8px;
+  vertical-align: middle;
+}
+@media (max-width: 700px) {
+  .su-table .su-table-img-thumb { width: 58px; height: 58px; max-width: 58px; max-height: 58px; }
+  .su-table td:has(> .su-table-img-thumb) { width: 74px; min-width: 74px; max-width: 74px; }
+}
+
+
 @media (max-width: 800px) {
   .su-entry-core-row { grid-template-columns: 1fr; }
   .su-layout-choice-grid { grid-template-columns: 1fr; }
