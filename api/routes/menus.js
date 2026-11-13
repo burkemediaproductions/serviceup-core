@@ -1,5 +1,6 @@
 import express from 'express';
 import { checkPermission } from '../middleware/checkPermission.js';
+import { scheduleSiteRebuild } from '../lib/sitePublisher.js';
 
 const router = express.Router();
 
@@ -60,6 +61,7 @@ router.post('/', checkPermission('manage_content_types'), async (req, res) => {
        returning id, label, slug, config, created_at, updated_at`,
       [label, slug, JSON.stringify({ items: [] })]
     );
+    scheduleSiteRebuild(req.tenant, `created menu ${slug}`);
     return res.status(201).json(rows[0]);
   } catch (err) {
     console.error('[POST /api/menus]', err);
@@ -98,6 +100,7 @@ router.put('/:id', checkPermission('manage_content_types'), async (req, res) => 
       [label, slug, JSON.stringify(config), req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Menu not found' });
+    scheduleSiteRebuild(req.tenant, `updated menu ${slug}`);
     return res.json(rows[0]);
   } catch (err) {
     if (err?.code === '23505') {
@@ -115,6 +118,7 @@ router.delete('/:id', checkPermission('manage_content_types'), async (req, res) 
       [req.params.id]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Menu not found' });
+    scheduleSiteRebuild(req.tenant, `deleted menu ${req.params.id}`);
     return res.json({ ok: true });
   } catch (err) {
     console.error('[DELETE /api/menus/:id]', err);

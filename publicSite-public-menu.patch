@@ -1,0 +1,16 @@
+--- a/api/routes/publicSite.js
++++ b/api/routes/publicSite.js
+@@ -164,4 +164,13 @@
+   }
+ });
+ 
++// Read-only, published site menu data. No admin permissions or private settings exposed.
++router.get('/public/menu/:slug', async (req, res) => {
++  try {
++    const {rows} = await req.db.query('select config from menus where slug=$1 limit 1',[req.params.slug]);
++    if(!rows.length) return res.status(404).json({error:'Menu not found'});
++    const items = Array.isArray(rows[0].config?.items) ? rows[0].config.items : [];
++    return res.json({items:items.filter(x=>x.label&&x.url).map(x=>({id:x.id,label:x.label,url:x.url,target:x.target||'_self'}))});
++  } catch(e){console.error('[GET /api/public/menu/:slug]',e);return res.status(500).json({error:'Unable to load menu'});}
++});
+ export default router;

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { checkPermission } from '../middleware/checkPermission.js';
+import { scheduleSiteRebuild } from '../lib/sitePublisher.js';
 
 const router = Router();
 const guard = checkPermission('roles.manage');
@@ -358,6 +359,7 @@ router.post('/import', guard, async (req, res) => {
       [req.tenantId, manifest.format, manifest.source?.site || manifest.source?.source_root || 'Uploaded manifest', JSON.stringify(selected), JSON.stringify(summary), JSON.stringify(backup), req.user?.id || null],
     );
     await db.query('RELEASE SAVEPOINT tenant_manifest_import');
+    scheduleSiteRebuild(req.tenant, 'tenant content import');
     return res.json({ ok: true, dry_run: false, tenant: req.tenant, selected_sections: selected, summary, warnings: checked.warnings, import_id: inserted.rows[0].id, created_at: inserted.rows[0].created_at });
   } catch (error) {
     await db.query('ROLLBACK TO SAVEPOINT tenant_manifest_import').catch(() => {});

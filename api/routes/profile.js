@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import auth from '../middleware/auth.js';
 import { checkPermission } from '../middleware/checkPermission.js';
+import { scheduleSiteRebuild } from '../lib/sitePublisher.js';
 
 const router = Router();
 const arrayFields = ['phone_numbers', 'email_addresses', 'addresses', 'websites', 'social_profiles'];
@@ -101,6 +102,7 @@ router.put('/profile', auth, checkPermission('profile.manage'), async (req, res)
         values.websites, values.social_profiles,
       ],
     );
+    scheduleSiteRebuild(req.tenant, 'updated public organization profile');
     return res.json(rows[0]);
   } catch (error) {
     console.error('[PUT /api/profile]', error);
