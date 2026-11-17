@@ -1,0 +1,124 @@
+{
+  "pack_slug": "serviceup-crm",
+  "name": "ServiceUp CRM",
+  "version": "1.0.0",
+  "description": "Reusable CRM foundation for contacts, organizations, opportunities, cases and tasks. Tenant imports can extend it with industry-specific records and workflows.",
+  "gadget": {
+    "gadget_type": "crm",
+    "description": "Reusable ServiceUp CRM workspace",
+    "design_config": {},
+    "structure_config": {
+      "modules": ["contacts", "organizations", "opportunities", "cases", "tasks"],
+      "pipeline_enabled": true,
+      "activity_timeline_enabled": true
+    },
+    "is_active": true,
+    "is_system": false
+  },
+  "gizmos": [
+    {
+      "name": "CRM Pipeline",
+      "slug": "pipeline",
+      "gizmo_type": "workflow",
+      "description": "Reusable stages, ownership and follow-up tracking.",
+      "config": { "content_type": "crm-opportunities", "stage_field": "stage", "owner_field": "owner" },
+      "is_enabled": true,
+      "is_system": false
+    },
+    {
+      "name": "CRM Case Management",
+      "slug": "cases",
+      "gizmo_type": "workflow",
+      "description": "Reusable case records with contacts, status, ownership and dates.",
+      "config": { "content_type": "crm-cases", "status_field": "status", "owner_field": "owner" },
+      "is_enabled": true,
+      "is_system": false
+    }
+  ],
+  "gadget_gizmos": ["pipeline", "cases"],
+  "content_types": [
+    {
+      "name": "CRM Contact",
+      "slug": "crm-contacts",
+      "description": "People managed in the CRM.",
+      "fields": [
+        { "field_key": "name", "type": "name", "label": "Name", "required": true, "order_index": 1 },
+        { "field_key": "email", "type": "email", "label": "Email", "order_index": 2 },
+        { "field_key": "phone", "type": "phone", "label": "Phone", "order_index": 3 },
+        { "field_key": "contact_type", "type": "select", "label": "Contact type", "order_index": 4, "config": { "options": ["Lead", "Client", "Partner", "Vendor", "Other"] } },
+        { "field_key": "organization", "type": "relationship", "label": "Organization", "order_index": 5, "config": { "content_type": "crm-organizations" } },
+        { "field_key": "preferred_contact_method", "type": "select", "label": "Preferred contact method", "order_index": 6, "config": { "options": ["Email", "Phone", "Text"] } },
+        { "field_key": "source", "type": "text", "label": "Source", "order_index": 7 },
+        { "field_key": "owner", "type": "relation_user", "label": "Owner", "order_index": 8 },
+        { "field_key": "notes", "type": "textarea", "label": "Summary notes", "order_index": 9 }
+      ]
+    },
+    {
+      "name": "CRM Organization",
+      "slug": "crm-organizations",
+      "description": "Companies, agencies, partners and other organizations.",
+      "fields": [
+        { "field_key": "name", "type": "text", "label": "Organization name", "required": true, "order_index": 1 },
+        { "field_key": "organization_type", "type": "select", "label": "Type", "order_index": 2, "config": { "options": ["Client", "Partner", "Vendor", "Referral Source", "Other"] } },
+        { "field_key": "website", "type": "url", "label": "Website", "order_index": 3 },
+        { "field_key": "phone", "type": "phone", "label": "Phone", "order_index": 4 },
+        { "field_key": "address", "type": "address", "label": "Address", "order_index": 5 },
+        { "field_key": "status", "type": "select", "label": "Status", "order_index": 6, "config": { "options": ["Prospect", "Active", "Inactive"] } },
+        { "field_key": "owner", "type": "relation_user", "label": "Owner", "order_index": 7 },
+        { "field_key": "notes", "type": "textarea", "label": "Notes", "order_index": 8 }
+      ]
+    },
+    {
+      "name": "CRM Opportunity",
+      "slug": "crm-opportunities",
+      "description": "Leads and opportunities moving through a pipeline.",
+      "fields": [
+        { "field_key": "name", "type": "text", "label": "Opportunity", "required": true, "order_index": 1 },
+        { "field_key": "contact", "type": "relationship", "label": "Contact", "order_index": 2, "config": { "content_type": "crm-contacts" } },
+        { "field_key": "organization", "type": "relationship", "label": "Organization", "order_index": 3, "config": { "content_type": "crm-organizations" } },
+        { "field_key": "pipeline", "type": "text", "label": "Pipeline", "order_index": 4 },
+        { "field_key": "stage", "type": "select", "label": "Stage", "order_index": 5, "config": { "options": ["New", "Contacted", "Qualified", "Application", "Review", "Approved", "Won", "Lost"] } },
+        { "field_key": "status", "type": "select", "label": "Status", "order_index": 6, "config": { "options": ["Open", "On Hold", "Won", "Lost"] } },
+        { "field_key": "priority", "type": "select", "label": "Priority", "order_index": 7, "config": { "options": ["Low", "Normal", "High", "Urgent"] } },
+        { "field_key": "estimated_value", "type": "currency", "label": "Estimated value", "order_index": 8 },
+        { "field_key": "next_follow_up", "type": "datetime", "label": "Next follow-up", "order_index": 9 },
+        { "field_key": "owner", "type": "relation_user", "label": "Owner", "order_index": 10 },
+        { "field_key": "source", "type": "text", "label": "Source", "order_index": 11 },
+        { "field_key": "summary", "type": "textarea", "label": "Summary", "order_index": 12 }
+      ]
+    },
+    {
+      "name": "CRM Case",
+      "slug": "crm-cases",
+      "description": "Ongoing client work, service journeys or managed cases.",
+      "fields": [
+        { "field_key": "name", "type": "text", "label": "Case", "required": true, "order_index": 1 },
+        { "field_key": "primary_contact", "type": "relationship", "label": "Primary contact", "order_index": 2, "config": { "content_type": "crm-contacts" } },
+        { "field_key": "case_type", "type": "text", "label": "Case type", "order_index": 3 },
+        { "field_key": "status", "type": "select", "label": "Status", "order_index": 4, "config": { "options": ["New", "Active", "Waiting", "Complete", "Archived"] } },
+        { "field_key": "department", "type": "select", "label": "Department", "order_index": 5, "config": { "options": ["Intake", "Operations", "Legal", "Finance", "Administration"] } },
+        { "field_key": "owner", "type": "relation_user", "label": "Owner", "order_index": 6 },
+        { "field_key": "opened_at", "type": "date", "label": "Opened", "order_index": 7 },
+        { "field_key": "target_date", "type": "date", "label": "Target date", "order_index": 8 },
+        { "field_key": "summary", "type": "textarea", "label": "Summary", "order_index": 9 }
+      ]
+    },
+    {
+      "name": "CRM Task",
+      "slug": "crm-tasks",
+      "description": "Tasks and follow-ups linked to CRM records.",
+      "fields": [
+        { "field_key": "title", "type": "text", "label": "Task", "required": true, "order_index": 1 },
+        { "field_key": "status", "type": "select", "label": "Status", "order_index": 2, "config": { "options": ["Open", "In Progress", "Waiting", "Done", "Cancelled"] } },
+        { "field_key": "priority", "type": "select", "label": "Priority", "order_index": 3, "config": { "options": ["Low", "Normal", "High", "Urgent"] } },
+        { "field_key": "due_at", "type": "datetime", "label": "Due", "order_index": 4 },
+        { "field_key": "assigned_to", "type": "relation_user", "label": "Assigned to", "order_index": 5 },
+        { "field_key": "contact", "type": "relationship", "label": "Contact", "order_index": 6, "config": { "content_type": "crm-contacts" } },
+        { "field_key": "opportunity", "type": "relationship", "label": "Opportunity", "order_index": 7, "config": { "content_type": "crm-opportunities" } },
+        { "field_key": "case", "type": "relationship", "label": "Case", "order_index": 8, "config": { "content_type": "crm-cases" } },
+        { "field_key": "details", "type": "textarea", "label": "Details", "order_index": 9 }
+      ]
+    }
+  ],
+  "entries": []
+}
