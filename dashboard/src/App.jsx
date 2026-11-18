@@ -90,9 +90,11 @@ function App() {
             path="/admin/menus"
             element={
               <RequireAuth>
-                <AdminLayout>
-                  <MenusPage />
-                </AdminLayout>
+                <RequirePermission slug="menus.manage">
+                  <AdminLayout>
+                    <MenusPage />
+                  </AdminLayout>
+                </RequirePermission>
               </RequireAuth>
             }
           />

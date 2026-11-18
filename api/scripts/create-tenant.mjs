@@ -59,6 +59,7 @@ try {
       ($1, 'roles.manage', 'Manage roles', 'Create roles and assign permissions'),
       ($1, 'users.manage', 'Manage users', 'Create and manage client users'),
       ($1, 'manage_content_types', 'Manage content types', 'Configure fields and views'),
+      ($1, 'menus.manage', 'Manage menus', 'Create, edit and delete navigation menus'),
       ($1, 'integrations.manage', 'Manage integrations', 'Configure client integrations'),
       ($1, 'pixels.manage', 'Manage Pixels', 'Upload and manage media assets'),
       ($1, 'profile.manage', 'Manage Profile', 'Update organization and contact information'),

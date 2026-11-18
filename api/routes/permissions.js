@@ -1,6 +1,6 @@
 // api/routes/permissions.js
 import { Router } from 'express';
-import { checkPermission } from '../middleware/checkPermission.js';
+import { checkPermission, clearPermissionCache } from '../middleware/checkPermission.js';
 
 const router = Router();
 
@@ -147,6 +147,7 @@ router.post(
          returning *`,
         [req.tenantId, role_slug, permission_slug, !!allowed]
       );
+      clearPermissionCache(req.tenantId);
       res.json(rows[0]);
     } catch (e) {
       console.error('[POST /api/permissions/assign]', e);

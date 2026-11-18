@@ -22,7 +22,7 @@ function normalizeMenuItems(items) {
   })).filter((item) => item.label && item.url);
 }
 
-router.get('/', checkPermission('manage_content_types'), async (req, res) => {
+router.get('/', checkPermission('menus.manage'), async (req, res) => {
   try {
     const { rows } = await req.db.query(
       `select id, label, slug, config, created_at, updated_at
@@ -36,7 +36,7 @@ router.get('/', checkPermission('manage_content_types'), async (req, res) => {
   }
 });
 
-router.post('/', checkPermission('manage_content_types'), async (req, res) => {
+router.post('/', checkPermission('menus.manage'), async (req, res) => {
   const label = String(req.body?.label || '').trim();
   if (!label) return res.status(400).json({ error: 'Menu label is required' });
 
@@ -69,7 +69,7 @@ router.post('/', checkPermission('manage_content_types'), async (req, res) => {
   }
 });
 
-router.get('/:id', checkPermission('manage_content_types'), async (req, res) => {
+router.get('/:id', checkPermission('menus.manage'), async (req, res) => {
   try {
     const { rows } = await req.db.query(
       `select id, label, slug, config, created_at, updated_at
@@ -84,7 +84,7 @@ router.get('/:id', checkPermission('manage_content_types'), async (req, res) => 
   }
 });
 
-router.put('/:id', checkPermission('manage_content_types'), async (req, res) => {
+router.put('/:id', checkPermission('menus.manage'), async (req, res) => {
   const label = String(req.body?.label || '').trim();
   const slug = slugify(req.body?.slug || label);
   if (!label) return res.status(400).json({ error: 'Menu label is required' });
@@ -111,7 +111,7 @@ router.put('/:id', checkPermission('manage_content_types'), async (req, res) => 
   }
 });
 
-router.delete('/:id', checkPermission('manage_content_types'), async (req, res) => {
+router.delete('/:id', checkPermission('menus.manage'), async (req, res) => {
   try {
     const result = await req.db.query(
       'delete from public.menus where id = $1::uuid returning id',

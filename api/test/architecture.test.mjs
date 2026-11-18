@@ -83,6 +83,17 @@ test('Menus can be selected, edited, reordered, saved, and deleted', () => {
   assert.match(route, /router\.put\('\/:id'/);
   assert.match(route, /router\.delete\('\/:id'/);
 });
+test('Menu management has an independent assignable permission', () => {
+  const route = read('api/routes/menus.js');
+  const app = read('dashboard/src/App.jsx');
+  const sidebar = read('dashboard/src/components/Sidebar.jsx');
+  const migration = read('db/010_menu_permissions.sql');
+  assert.match(route, /checkPermission\('menus\.manage'\)/);
+  assert.doesNotMatch(route, /checkPermission\('manage_content_types'\)/);
+  assert.match(app, /RequirePermission slug="menus\.manage"/);
+  assert.match(sidebar, /useHasPermission\("menus\.manage"\)/);
+  assert.match(migration, /'menus\.manage', 'Manage menus'/);
+});
 test('branding is cached and applied before the dashboard first paint', () => {
   const context = read('dashboard/src/context/SettingsContext.jsx');
   const main = read('dashboard/src/main.jsx');

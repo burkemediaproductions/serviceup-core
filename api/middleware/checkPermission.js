@@ -7,6 +7,22 @@ const rolePermCache = new Map();
 let lastCacheLoad = 0;
 const CACHE_TTL_MS = 30_000; // 30 seconds
 
+export function clearPermissionCache(tenantId = null) {
+  if (!tenantId) {
+    rolePermCache.clear();
+    lastCacheLoad = 0;
+    return;
+  }
+
+  const prefix = `${tenantId}::`;
+  for (const key of rolePermCache.keys()) {
+    if (key === `loaded::${tenantId}` || key.startsWith(prefix)) {
+      rolePermCache.delete(key);
+    }
+  }
+  lastCacheLoad = 0;
+}
+
 async function loadPermissionsIntoCache(db, tenantId) {
   const now = Date.now();
   if (now - lastCacheLoad < CACHE_TTL_MS && rolePermCache.has(`loaded::${tenantId}`)) return;

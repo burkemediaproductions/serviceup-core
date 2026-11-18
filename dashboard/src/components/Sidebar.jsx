@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useSettings } from "../context/SettingsContext";
+import useHasPermission from "../hooks/useHasPermission";
 
 // Utility to check if the current role can see an item. If the item has
 // no roles specified (or roles is an empty array), it's visible to all.
@@ -36,13 +37,22 @@ export default function Sidebar({ onClose, role = "VIEWER", onLogout }) {
   const { settings } = useSettings();
   const location = useLocation();
   const sidebarLogo = settings?.sidebarLogoUrl || settings?.logoUrl;
+  const canManageMenus = useHasPermission("menus.manage");
+
+  const canSeeItem = (item) => {
+    if (!canSee(item?.roles, role)) return false;
+    if (item?.permission === "menus.manage" || item?.to === "/admin/menus") {
+      return canManageMenus;
+    }
+    return true;
+  };
 
   // Default nav when settings.navSidebar isn't provided.
   const defaultNav = useMemo(
     () => [
       { label: "Dashboard", to: "/admin" },
       { label: "My Profile", to: "/admin/my-profile" },
-      { label: "Menus", to: "/admin/menus" },
+      { label: "Menus", to: "/admin/menus", permission: "menus.manage" },
       { label: "Users", to: "/admin/users" },
       { label: "Taxonomies", to: "/admin/taxonomies" },
       { label: "Content", to: "/admin/content" },
@@ -100,7 +110,7 @@ export default function Sidebar({ onClose, role = "VIEWER", onLogout }) {
       const anyChildMatches = item.children.some((child) => {
         if (!child?.to) return false;
         // Also respect roles when deciding to auto-open
-        if (!canSee(child.roles, role)) return false;
+        if (!canSeeItem(child)) return false;
         return path === child.to || path.startsWith(child.to + "/") || path.startsWith(child.to);
       });
 
@@ -108,7 +118,7 @@ export default function Sidebar({ onClose, role = "VIEWER", onLogout }) {
     });
 
     setOpenParents((prev) => ({ ...prev, ...nextOpen }));
-  }, [location.pathname, items, role]);
+  }, [location.pathname, items, role, canManageMenus]);
 
   const toggleParent = (index) => {
     setOpenParents((prev) => ({
@@ -164,7 +174,7 @@ export default function Sidebar({ onClose, role = "VIEWER", onLogout }) {
 
       {items.map((item, i) => {
         // Skip item if role isn't allowed
-        if (!canSee(item.roles, role)) return null;
+        if (!canSeeItem(item)) return null;
 
         const hasChildren = Array.isArray(item.children) && item.children.length > 0;
 
@@ -182,7 +192,7 @@ export default function Sidebar({ onClose, role = "VIEWER", onLogout }) {
         }
 
         // Parent group with children filtered by role
-        const visibleChildren = item.children.filter((child) => canSee(child.roles, role));
+        const visibleChildren = item.children.filter((child) => canSeeItem(child));
 
         // If no visible children, fall back to parent link if it exists
         if (visibleChildren.length === 0) {
