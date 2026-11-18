@@ -265,7 +265,6 @@ values
   ('00000000-0000-0000-0000-000000000000', 'roles.manage', 'Manage roles', 'Create roles and assign permissions'),
   ('00000000-0000-0000-0000-000000000000', 'users.manage', 'Manage users', 'Create and manage client users'),
   ('00000000-0000-0000-0000-000000000000', 'manage_content_types', 'Manage content types', 'Configure fields and views'),
-  ('00000000-0000-0000-0000-000000000000', 'menus.manage', 'Manage menus', 'Create, edit and delete navigation menus'),
   ('00000000-0000-0000-0000-000000000000', 'integrations.manage', 'Manage integrations', 'Configure client integrations'),
   ('00000000-0000-0000-0000-000000000000', 'pixels.manage', 'Manage Pixels', 'Upload and manage media assets'),
   ('00000000-0000-0000-0000-000000000000', 'profile.manage', 'Manage Profile', 'Update organization and contact information')
