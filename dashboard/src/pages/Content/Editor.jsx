@@ -6,6 +6,7 @@ import LoadingPanel from "../../components/LoadingPanel";
 import RichTextContent, { isRichTextDocument } from "../../components/RichTextContent";
 import { useSettings } from "../../context/SettingsContext";
 import { useAuth } from "../../context/AuthContext";
+import { uploadToSupabase, resolveBucketName } from "../../lib/storage";
 
 // Simple slug helper
 function slugify(value) {
@@ -185,6 +186,10 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const sourceType = config?.source_type || config?.sourceType;
   const relationshipField = config?.relationship_field || config?.relationshipField;
   const fields = Array.isArray(config?.display_fields) ? config.display_fields : ["title", "status"];
@@ -212,7 +217,69 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [entryId, typeSlug, sourceType, relationshipField, config?.status_field, JSON.stringify(config?.statuses || [])]);
+  }, [entryId, typeSlug, sourceType, relationshipField, config?.status_field, JSON.stringify(config?.statuses || []), refreshKey]);
+
+  const quickUploadEnabled = sourceType === "documents" && config?.quick_upload !== false;
+  const acceptedDocuments = config?.accept || ".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const maxDocumentMB = Number(config?.max_size_mb || 25);
+
+  const acceptsFile = (file) => String(acceptedDocuments).split(",").map((part) => part.trim()).filter(Boolean).some((part) => {
+    if (part.startsWith(".")) return file.name.toLowerCase().endsWith(part.toLowerCase());
+    if (part.endsWith("/*")) return file.type.startsWith(part.slice(0, -1));
+    return file.type === part;
+  });
+
+  async function uploadDocuments(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length || uploading || !quickUploadEnabled) return;
+    if (!entryId || entryId === "new") {
+      setError(`Save this ${typeSlug.replaceAll("-", " ")} before attaching documents.`);
+      return;
+    }
+    const invalid = files.find((file) => !acceptsFile(file) || (maxDocumentMB && file.size > maxDocumentMB * 1024 * 1024));
+    if (invalid) {
+      setError(`${invalid.name} must be a PDF, DOC, or DOCX no larger than ${maxDocumentMB} MB.`);
+      return;
+    }
+
+    setUploading(true);
+    setError("");
+    try {
+      const parent = await api.get(`/api/content/${encodeURIComponent(typeSlug)}/${encodeURIComponent(entryId)}`);
+      const canonicalParentId = parent?.id || entryId;
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        setUploadProgress(`Uploading ${index + 1} of ${files.length}: ${file.name}`);
+        const stored = await uploadToSupabase(file, {
+          bucket: resolveBucketName("private"),
+          pathPrefix: `nbsg-documents/${typeSlug}/${canonicalParentId}`,
+          makePublic: false,
+        });
+        const documentName = file.name.replace(/\.[^.]+$/, "") || file.name;
+        const data = {
+          document_name: documentName,
+          document_type: config?.default_document_type || "Other",
+          document_status: config?.default_document_status || "Received",
+          date_received: new Date().toISOString().slice(0, 10),
+          file: { ...stored, name: file.name, mime: file.type, size: file.size },
+          [relationshipField]: canonicalParentId,
+        };
+        await api.post(`/api/content/${encodeURIComponent(sourceType)}`, {
+          title: documentName,
+          slug: `${slugify(documentName)}-${Date.now()}-${index + 1}`,
+          status: "published",
+          data,
+        });
+      }
+      setUploadProgress(`${files.length} document${files.length === 1 ? "" : "s"} attached.`);
+      setRefreshKey((value) => value + 1);
+    } catch (err) {
+      setError(err?.message || "Document upload failed.");
+      setUploadProgress("");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   const valueFor = (record, key) => {
     if (key === "title") return record.title || record.slug;
@@ -230,6 +297,27 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate }) {
           <button type="button" className="su-btn" onClick={() => navigate(`/admin/content/${sourceType}/new`)}>Add new</button>
         )}
       </div>
+      {quickUploadEnabled && (
+        entryId && entryId !== "new" ? (
+          <div
+            onDragEnter={(event) => { event.preventDefault(); if (!uploading) setDragOver(true); }}
+            onDragOver={(event) => { event.preventDefault(); if (!uploading) setDragOver(true); }}
+            onDragLeave={(event) => { event.preventDefault(); setDragOver(false); }}
+            onDrop={(event) => { event.preventDefault(); setDragOver(false); uploadDocuments(event.dataTransfer?.files); }}
+            style={{ border: "2px dashed var(--su-border)", borderRadius: 10, padding: 16, marginBottom: 10, textAlign: "center", background: dragOver ? "rgba(59,130,246,0.10)" : "transparent", opacity: uploading ? 0.65 : 1 }}
+          >
+            <input id={`related-documents-${relationshipField}`} type="file" multiple accept={acceptedDocuments} disabled={uploading}
+              style={{ display: "none" }} onChange={(event) => { uploadDocuments(event.target.files); event.target.value = ""; }} />
+            <label htmlFor={`related-documents-${relationshipField}`} style={{ cursor: uploading ? "wait" : "pointer", fontWeight: 600 }}>
+              {uploading ? uploadProgress : "Drop documents here, or click to choose files"}
+            </label>
+            <div className="su-text-muted" style={{ fontSize: 11, marginTop: 4 }}>PDF, DOC or DOCX · up to {maxDocumentMB} MB each · private storage</div>
+          </div>
+        ) : (
+          <div className="su-text-muted" style={{ marginBottom: 10 }}>Save this record before attaching documents.</div>
+        )
+      )}
+      {!uploading && uploadProgress && <div style={{ color: "#166534", fontSize: 12, marginBottom: 8 }}>{uploadProgress}</div>}
       {loading && <div className="su-text-muted">Loading…</div>}
       {error && <div style={{ color: "#991b1b" }}>{error}</div>}
       {!loading && !error && !records.length && <div className="su-text-muted">No related records yet.</div>}
