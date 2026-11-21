@@ -173,6 +173,14 @@ function summarizeArray(arr) {
   return `${len} items`;
 }
 
+function relationshipTarget(field) {
+  const cfg = field?.config || field?.options || {};
+  const rel = cfg?.relation || {};
+  const raw = rel.content_type_slug || rel.contentType || rel.content_type || rel.slug ||
+    cfg.relatedType || cfg.content_type || cfg.contentType || cfg.targetType || cfg.target;
+  return typeof raw === 'object' ? raw.slug || raw.content_type || raw.relatedType : raw;
+}
+
 export default function TypeList() {
   const navigate = useNavigate();
   const { type: typeSlugParam, typeSlug: typeSlugAlt } = useParams();
@@ -199,6 +207,8 @@ export default function TypeList() {
   const [titleKey, setTitleKey] = useState('title');
 
   const [contentType, setContentType] = useState(null);
+  const [relationshipLabels, setRelationshipLabels] = useState({});
+  const [relatedColumnValues, setRelatedColumnValues] = useState({});
 
   // List-view state coming from the backend
   const [listViews, setListViews] = useState([]);
@@ -262,9 +272,30 @@ export default function TypeList() {
           );
         }
 
-        if (!cancelled) {
-          setContentType(ct || null);
+        if (ct?.id) {
+          try {
+            const full = await api.get(`/api/content-types/${ct.id}?all=true`);
+            ct = full?.data || full || ct;
+          } catch (err) {
+            console.warn('[TypeList] Failed to load field definitions', err);
+          }
         }
+        if (!cancelled) setContentType(ct || null);
+
+        const nextRelationshipLabels = {};
+        const relationFields = (ct?.fields || []).filter((field) => ['relation', 'relationship'].includes(String(field?.type || '').toLowerCase()));
+        for (const field of relationFields) {
+          const target = relationshipTarget(field);
+          if (!target || nextRelationshipLabels[target]) continue;
+          try {
+            const related = await api.get(`/api/content/${encodeURIComponent(target)}?limit=500`);
+            const items = Array.isArray(related) ? related : related?.data || [];
+            nextRelationshipLabels[target] = Object.fromEntries(items.map((item) => [item.id, item.title || item.data?.title || item.slug || item.id]));
+          } catch {
+            nextRelationshipLabels[target] = {};
+          }
+        }
+        if (!cancelled) setRelationshipLabels(nextRelationshipLabels);
 
         // 3) Load list views for this content type + role
         let views = [];
@@ -435,6 +466,44 @@ export default function TypeList() {
     return sortRows(eligible, activeView?.config?.sort);
   }, [rows, activeView]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const relatedColumns = (activeView?.config?.columns || []).filter((column) => column?.related?.source_type && column?.related?.relationship_field);
+    if (!relatedColumns.length || !rows.length) {
+      setRelatedColumnValues({});
+      return undefined;
+    }
+    (async () => {
+      const next = {};
+      for (const column of relatedColumns) {
+        next[column.key] = {};
+        const cfg = column.related;
+        await Promise.all(rows.map(async (row) => {
+          try {
+            const target = row.id || row.slug;
+            const qs = new URLSearchParams({ source_type: cfg.source_type, relationship_field: cfg.relationship_field });
+            if (cfg.status_field) qs.set('status_field', cfg.status_field);
+            if (Array.isArray(cfg.statuses) && cfg.statuses.length) qs.set('status', cfg.statuses.join(','));
+            const result = await api.get(`/api/related-records/${encodeURIComponent(typeSlug)}/${encodeURIComponent(target)}?${qs}`);
+            const records = Array.isArray(result) ? result : result?.data || [];
+            const values = records.map((record) => {
+              const field = cfg.display_field || 'title';
+              const raw = record[field] ?? record.data?.[field];
+              const labels = record._relationship_labels?.[field] || {};
+              if (Array.isArray(raw)) return raw.map((value) => labels[value] || value).join(', ');
+              return labels[raw] || raw;
+            }).filter(Boolean);
+            next[column.key][row.id] = values.join(', ');
+          } catch {
+            next[column.key][row.id] = '';
+          }
+        }));
+      }
+      if (!cancelled) setRelatedColumnValues(next);
+    })();
+    return () => { cancelled = true; };
+  }, [activeView, rows, typeSlug]);
+
   // ---------------------------------------------------------------------------
   // Navigation + view switching
   // ---------------------------------------------------------------------------
@@ -480,6 +549,7 @@ export default function TypeList() {
   // Render one cell with heuristics for images, text, dates, etc.
   // ---------------------------------------------------------------------------
   function renderCell(row, key) {
+    if (relatedColumnValues[key]) return relatedColumnValues[key][row.id] || '';
     let value;
     if (key === 'title') {
       const tCfg = activeView?.config?.title && typeof activeView.config.title === 'object' ? activeView.config.title : {};
@@ -520,6 +590,11 @@ export default function TypeList() {
         contentType.fields.find((f) => (f?.field_key || f?.key) === key) || null;
 
       if (fieldDef) {
+        if (['relation', 'relationship'].includes(String(fieldDef.type || '').toLowerCase())) {
+          const labels = relationshipLabels[relationshipTarget(fieldDef)] || {};
+          const values = Array.isArray(value) ? value : [value];
+          return values.map((item) => labels[typeof item === 'object' ? item.id || item.value : item] || String(typeof item === 'object' ? item.label || item.id || '' : item)).filter(Boolean).join(', ');
+        }
         const display = (fieldDef.type === 'image' && looksLikeImageKey(key)) ? '' : formatFieldValueForList(fieldDef, value);
         if (display !== '') return display;
       }

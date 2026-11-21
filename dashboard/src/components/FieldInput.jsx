@@ -2637,8 +2637,11 @@ function RelationEntryField({
   // Pull target slug from multiple possible config shapes
   const relRaw =
     cfg?.relation?.contentType ??
+    cfg?.relation?.content_type ??
+    cfg?.relation?.content_type_slug ??
     cfg?.relation?.slug ??
     cfg?.relatedType ??
+    cfg?.content_type ??
     cfg?.contentType ??
     cfg?.targetType ??
     cfg?.target ??

@@ -104,6 +104,16 @@ function buildLayoutFromView(contentType, viewConfig) {
           rows,
         });
       }
+      if (String(sec.type || sec.kind || "").toLowerCase() === "related_records") {
+        sections.push({
+          id: sec.id || `related-${sections.length + 1}`,
+          title: sec.title || "Related records",
+          type: "related_records",
+          related: sec.related || sec.config || {},
+          columns,
+          rows: [],
+        });
+      }
     }
   }
 
@@ -141,8 +151,11 @@ function getRelationshipTargetSlug(field) {
 
   const v =
     cfg?.relation?.contentType ||
+    cfg?.relation?.content_type ||
+    cfg?.relation?.content_type_slug ||
     cfg?.relation?.slug ||
     cfg?.relatedType ||
+    cfg?.content_type ||
     cfg?.contentType ||
     cfg?.targetType ||
     cfg?.target ||
@@ -166,6 +179,68 @@ function getDynamicChoiceSourceSlug(def) {
   if (sourceType) return String(sourceType);
   if (optionsSource === "dynamic" && cfg?.source) return String(cfg.source);
   return null;
+}
+
+function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate }) {
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const sourceType = config?.source_type || config?.sourceType;
+  const relationshipField = config?.relationship_field || config?.relationshipField;
+  const fields = Array.isArray(config?.display_fields) ? config.display_fields : ["title", "status"];
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!entryId || entryId === "new" || !sourceType || !relationshipField) {
+      setLoading(false);
+      setRecords([]);
+      return undefined;
+    }
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const qs = new URLSearchParams({ source_type: sourceType, relationship_field: relationshipField });
+        if (config?.status_field) qs.set("status_field", config.status_field);
+        if (Array.isArray(config?.statuses) && config.statuses.length) qs.set("status", config.statuses.join(","));
+        const result = await api.get(`/api/related-records/${encodeURIComponent(typeSlug)}/${encodeURIComponent(entryId)}?${qs}`);
+        if (!cancelled) setRecords(Array.isArray(result) ? result : result?.data || []);
+      } catch (err) {
+        if (!cancelled) setError(err?.message || "Could not load related records.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [entryId, typeSlug, sourceType, relationshipField, config?.status_field, JSON.stringify(config?.statuses || [])]);
+
+  const valueFor = (record, key) => {
+    if (key === "title") return record.title || record.slug;
+    const value = record[key] ?? record.data?.[key];
+    const labels = record._relationship_labels?.[key] || {};
+    if (Array.isArray(value)) return value.map((item) => labels[item] || item).join(", ");
+    return labels[value] || value;
+  };
+
+  return (
+    <div style={{ border: "1px solid var(--su-border)", borderRadius: 10, padding: 12, marginBottom: 12, background: "var(--su-surface)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+        <strong style={{ fontSize: 13 }}>{title || "Related records"}</strong>
+        {config?.allow_create !== false && sourceType && (
+          <button type="button" className="su-btn" onClick={() => navigate(`/admin/content/${sourceType}/new`)}>Add new</button>
+        )}
+      </div>
+      {loading && <div className="su-text-muted">Loading…</div>}
+      {error && <div style={{ color: "#991b1b" }}>{error}</div>}
+      {!loading && !error && !records.length && <div className="su-text-muted">No related records yet.</div>}
+      {!loading && records.map((record) => (
+        <button key={record.id} type="button" className="su-btn" onClick={() => navigate(`/admin/content/${sourceType}/${record.slug || record.id}`)}
+          style={{ display: "grid", width: "100%", gridTemplateColumns: `repeat(${Math.min(fields.length, 4)}, minmax(0, 1fr))`, textAlign: "left", marginTop: 8, gap: 10 }}>
+          {fields.map((field) => <span key={field}>{String(valueFor(record, field) ?? "")}</span>)}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // ----------------------------
@@ -1030,7 +1105,16 @@ export default function Editor() {
               </p>
             )}
 
-            {sections.map((section) => (
+            {sections.map((section) => section.type === "related_records" ? (
+              <RelatedRecordsPanel
+                key={section.id}
+                title={section.title}
+                config={section.related}
+                typeSlug={typeSlug}
+                entryId={entryId}
+                navigate={navigate}
+              />
+            ) : (
               <div
                 key={section.id}
                 style={{

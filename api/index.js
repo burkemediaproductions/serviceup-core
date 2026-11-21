@@ -22,6 +22,7 @@ import contentTypesRouter from './routes/contentTypes.js';
 import entryViewsRouter from './routes/entryViews.js';
 import menusRouter from './routes/menus.js';
 import listViewsRouter from './routes/listViews.js';
+import relatedRecordsRouter from './routes/relatedRecords.js';
 
 import gizmosRouter from './routes/gizmos.js';
 import gadgetsRouter from './routes/gadgets.js';
@@ -890,6 +891,7 @@ app.use('/api/tenant-transfer', authMiddleware, tenantTransferRouter);
 // manage_content_types inside the routers.
 app.use('/api', authMiddleware, entryViewsRouter);
 app.use('/api', authMiddleware, listViewsRouter);
+app.use('/api', authMiddleware, relatedRecordsRouter);
 app.use('/api/menus', authMiddleware, menusRouter);
 
 // Gizmos and Gadgets admin routes (not gizmo packs)

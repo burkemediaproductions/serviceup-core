@@ -103,6 +103,7 @@ function getRawSectionsFromView(view) {
 
 function normalizeSections(rawSections) {
   return (rawSections || []).map((s, idx) => ({
+    ...s,
     id: s.id || `widget-${idx + 1}`,
     title: s.title || `Widget ${idx + 1}`,
     description: s.description || "",
@@ -667,6 +668,8 @@ const loadViewForEdit = (view) => {
           .map((k) => String(k || "").trim())
           .filter(Boolean);
         return {
+          ...(sec.type ? { type: sec.type } : {}),
+          ...(sec.related ? { related: sec.related } : {}),
           id: sec.id,
           title: sec.title,
           description: sec.description,
@@ -674,7 +677,7 @@ const loadViewForEdit = (view) => {
           fields: cleanedFields,
         };
       })
-      .filter((s) => s.fields && s.fields.length);
+      .filter((s) => (s.fields && s.fields.length) || s.type === "related_records");
 
     if (payloadSections.length === 0) {
       setError("Please add at least one widget with a field");
@@ -854,7 +857,7 @@ if (newly) loadViewForEdit(newly);
               >
                 <strong>{sec.title || `Widget ${idx + 1}`}</strong>
                 <small className="su-text-xs su-text-muted">
-                  {sec.fields.length} field{sec.fields.length !== 1 ? "s" : ""}
+                  {sec.type === "related_records" ? "Related records panel" : `${sec.fields.length} field${sec.fields.length !== 1 ? "s" : ""}`}
                 </small>
               </div>
 
