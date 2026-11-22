@@ -11,10 +11,35 @@ function formatBytes(value) {
   return `${(bytes / (1024 ** index)).toFixed(index ? 1 : 0)} ${units[index]}`;
 }
 
+function previewKind(pixel) {
+  const mime = String(pixel?.mime_type || '').toLowerCase();
+  const name = String(pixel?.original_name || pixel?.storage_path || '').toLowerCase();
+  if (mime.includes('pdf') || name.endsWith('.pdf')) return 'pdf';
+  if (mime.includes('officedocument.wordprocessingml') || mime.includes('msword') || name.endsWith('.doc') || name.endsWith('.docx')) return 'word';
+  return '';
+}
+
+function PixelDocumentPreview({ state, onClose }) {
+  useEffect(() => {
+    if (!state.open) return undefined;
+    const key = (event) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [state.open, onClose]);
+  if (!state.open) return null;
+  return <div role="dialog" aria-modal="true" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} style={{position:'fixed',inset:0,zIndex:9999,background:'rgba(0,0,0,.58)',display:'grid',placeItems:'center',padding:16}}>
+    <div style={{width:'min(1100px,96vw)',height:'min(84vh,860px)',background:'var(--su-surface,#fff)',borderRadius:14,overflow:'hidden',display:'grid',gridTemplateRows:'auto 1fr'}}>
+      <div style={{padding:12,borderBottom:'1px solid var(--su-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}><strong>{state.title || 'Document preview'}</strong><button className="su-btn" type="button" onClick={onClose}>Close</button></div>
+      <div style={{position:'relative'}}>{state.loading ? <div style={{padding:18}}>Loading preview…</div> : state.error ? <div style={{padding:18,color:'#b91c1c'}}>{state.error}</div> : <iframe title="Document preview" src={state.url} style={{width:'100%',height:'100%',border:0}} />}</div>
+    </div>
+  </div>;
+}
+
 function PixelCard({ pixel, onSaved, onDeleted }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ title: pixel.title || '', alt_text: pixel.alt_text || '', caption: pixel.caption || '' });
   const [preview, setPreview] = useState(pixel.public_url || '');
+  const [documentPreview, setDocumentPreview] = useState({ open: false, loading: false, url: '', error: '', title: '' });
 
   useEffect(() => {
     if (pixel.public_url || !pixel.mime_type?.startsWith('image/')) return;
@@ -31,6 +56,19 @@ function PixelCard({ pixel, onSaved, onDeleted }) {
     if (!window.confirm(`Delete “${pixel.title}” from Pixels and Storage?`)) return;
     await api.del(`/api/pixels/${pixel.id}`);
     onDeleted(pixel.id);
+  };
+
+  const openDocumentPreview = async () => {
+    const kind = previewKind(pixel);
+    if (!kind) return;
+    setDocumentPreview({ open: true, loading: true, url: '', error: '', title: pixel.original_name || pixel.title });
+    try {
+      const signedUrl = pixel.public_url || await getSignedUrl(pixel.bucket, pixel.storage_path, 60 * 60);
+      const url = kind === 'word' ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(signedUrl)}` : signedUrl;
+      setDocumentPreview((current) => ({ ...current, loading: false, url }));
+    } catch (error) {
+      setDocumentPreview((current) => ({ ...current, loading: false, error: error.message || 'Could not create a preview.' }));
+    }
   };
 
   return (
@@ -53,11 +91,13 @@ function PixelCard({ pixel, onSaved, onDeleted }) {
           {pixel.mime_type?.startsWith('image/') && !pixel.alt_text && <p style={{ color: '#9a5a00', fontSize: 12 }}>Alt text needed</p>}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="su-btn" onClick={() => setEditing(true)}>Edit details</button>
+            {previewKind(pixel) && <button className="su-btn primary" onClick={openDocumentPreview}>Preview</button>}
             {pixel.public_url && <button className="su-btn" onClick={() => navigator.clipboard.writeText(pixel.public_url)}>Copy URL</button>}
             <button className="su-btn danger" onClick={remove}>Delete</button>
           </div>
         </>}
       </div>
+      <PixelDocumentPreview state={documentPreview} onClose={() => setDocumentPreview({ open: false, loading: false, url: '', error: '', title: '' })} />
     </article>
   );
 }

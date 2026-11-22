@@ -6,7 +6,7 @@ import LoadingPanel from "../../components/LoadingPanel";
 import RichTextContent, { isRichTextDocument } from "../../components/RichTextContent";
 import { useSettings } from "../../context/SettingsContext";
 import { useAuth } from "../../context/AuthContext";
-import { uploadToSupabase, resolveBucketName } from "../../lib/storage";
+import { uploadToSupabase, resolveBucketName, getSignedUrl } from "../../lib/storage";
 
 // Simple slug helper
 function slugify(value) {
@@ -182,6 +182,41 @@ function getDynamicChoiceSourceSlug(def) {
   return null;
 }
 
+function documentPreviewKind(file) {
+  const mime = String(file?.mime || file?.mime_type || "").toLowerCase();
+  const name = String(file?.name || file?.original_name || file?.path || "").toLowerCase();
+  if (mime.includes("pdf") || name.endsWith(".pdf")) return "pdf";
+  if (mime.includes("officedocument.wordprocessingml") || name.endsWith(".docx")) return "word";
+  if (mime.includes("msword") || name.endsWith(".doc")) return "word";
+  return "";
+}
+
+function RelatedDocumentPreview({ state, onClose }) {
+  useEffect(() => {
+    if (!state?.open) return undefined;
+    const close = (event) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [state?.open, onClose]);
+  if (!state?.open) return null;
+  return (
+    <div role="dialog" aria-modal="true" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,.58)", padding: 16, display: "grid", placeItems: "center" }}>
+      <div style={{ width: "min(1100px,96vw)", height: "min(84vh,860px)", background: "var(--su-surface,#fff)", borderRadius: 14, overflow: "hidden", display: "grid", gridTemplateRows: "auto 1fr" }}>
+        <div style={{ padding: 12, borderBottom: "1px solid var(--su-border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <strong>{state.title || "Document preview"}</strong>
+          <button type="button" className="su-btn" onClick={onClose}>Close</button>
+        </div>
+        <div style={{ position: "relative" }}>
+          {state.loading ? <div style={{ padding: 18 }}>Loading preview…</div>
+            : state.error ? <div style={{ padding: 18, color: "#b91c1c" }}>{state.error}</div>
+              : <iframe title="Document preview" src={state.url} style={{ width: "100%", height: "100%", border: 0 }} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -190,6 +225,7 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate }) {
   const [uploadProgress, setUploadProgress] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [documentPreview, setDocumentPreview] = useState({ open: false, loading: false, url: "", error: "", title: "" });
   const sourceType = config?.source_type || config?.sourceType;
   const relationshipField = config?.relationship_field || config?.relationshipField;
   const fields = Array.isArray(config?.display_fields) ? config.display_fields : ["title", "status"];
@@ -281,6 +317,22 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate }) {
     }
   }
 
+  async function previewDocument(record) {
+    const file = record?.data?.file;
+    const kind = documentPreviewKind(file);
+    if (!file?.bucket || !file?.path || !kind) return;
+    setDocumentPreview({ open: true, loading: true, url: "", error: "", title: file.name || record.title || "Document preview" });
+    try {
+      const signedUrl = file.publicUrl || await getSignedUrl(file.bucket, file.path, 60 * 60);
+      const url = kind === "word"
+        ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(signedUrl)}`
+        : signedUrl;
+      setDocumentPreview((current) => ({ ...current, loading: false, url }));
+    } catch (err) {
+      setDocumentPreview((current) => ({ ...current, loading: false, error: err?.message || "Could not create a preview." }));
+    }
+  }
+
   const valueFor = (record, key) => {
     if (key === "title") return record.title || record.slug;
     const value = record[key] ?? record.data?.[key];
@@ -321,12 +373,20 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate }) {
       {loading && <div className="su-text-muted">Loading…</div>}
       {error && <div style={{ color: "#991b1b" }}>{error}</div>}
       {!loading && !error && !records.length && <div className="su-text-muted">No related records yet.</div>}
-      {!loading && records.map((record) => (
-        <button key={record.id} type="button" className="su-btn" onClick={() => navigate(`/admin/content/${sourceType}/${record.slug || record.id}`)}
-          style={{ display: "grid", width: "100%", gridTemplateColumns: `repeat(${Math.min(fields.length, 4)}, minmax(0, 1fr))`, textAlign: "left", marginTop: 8, gap: 10 }}>
-          {fields.map((field) => <span key={field}>{String(valueFor(record, field) ?? "")}</span>)}
-        </button>
-      ))}
+      {!loading && records.map((record) => {
+        const file = record?.data?.file;
+        const canPreview = sourceType === "documents" && !!documentPreviewKind(file) && !!file?.bucket && !!file?.path;
+        return (
+          <div key={record.id} style={{ display: "flex", alignItems: "stretch", gap: 8, marginTop: 8 }}>
+            <button type="button" className="su-btn" onClick={() => navigate(`/admin/content/${sourceType}/${record.slug || record.id}`)}
+              style={{ display: "grid", flex: 1, gridTemplateColumns: `repeat(${Math.min(fields.length, 4)}, minmax(0, 1fr))`, textAlign: "left", gap: 10 }}>
+              {fields.map((field) => <span key={field}>{String(valueFor(record, field) ?? "")}</span>)}
+            </button>
+            {canPreview && <button type="button" className="su-btn primary" onClick={() => previewDocument(record)}>Preview</button>}
+          </div>
+        );
+      })}
+      <RelatedDocumentPreview state={documentPreview} onClose={() => setDocumentPreview({ open: false, loading: false, url: "", error: "", title: "" })} />
     </div>
   );
 }
@@ -839,7 +899,7 @@ export default function Editor() {
 
     const computedTitle =
       (coreCfg.titleMode === "template"
-        ? deriveTitleFromTemplate(coreCfg.titleTemplate || "", data || {})
+        ? deriveTitleFromTemplate(coreCfg.titleTemplate || "", data || {}) || title
         : title) || "";
 
     if (!computedTitle.trim()) {
@@ -1139,9 +1199,13 @@ export default function Editor() {
                   className="su-input"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="My great entry"
-                  disabled={coreCfg.titleMode === "template"}
+                  placeholder={coreCfg.titleMode === "template" ? "Enter a name, or complete the name fields below" : "My great entry"}
                 />
+                {coreCfg.titleMode === "template" && (
+                  <span style={{ display: "block", marginTop: 4, fontSize: 11, opacity: 0.7 }}>
+                    This title will update automatically when the configured name fields are completed.
+                  </span>
+                )}
               </label>
             )}
 
