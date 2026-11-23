@@ -299,8 +299,20 @@ button {
 .su-layout-choice-icon.is-toggle i:last-child { display: none; }
 .su-preview-value { min-width: 0; overflow-wrap: anywhere; }
 .su-rich-list-excerpt { display: block; max-width: 42rem; line-height: 1.45; overflow-wrap: anywhere; }
-.su-table { table-layout: auto; width: 100%; }
-.su-table td { max-width: 42rem; overflow-wrap: anywhere; word-break: break-word; }
+.su-table { table-layout: auto; width: 100%; border-collapse: separate; border-spacing: 0; }
+.su-table th { padding: 12px 14px; text-align: left; white-space: nowrap; background: color-mix(in srgb, var(--su-control-bg) 70%, var(--su-surface)); border-bottom: 2px solid var(--su-border); }
+.su-table td { max-width: 42rem; padding: 11px 14px; overflow-wrap: anywhere; word-break: break-word; border-bottom: 1px solid var(--su-border); }
+.su-table th + th, .su-table td + td { border-left: 1px solid color-mix(in srgb, var(--su-border) 72%, transparent); }
+.su-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--su-control-bg) 35%, transparent); }
+.su-table tbody tr:hover { background: color-mix(in srgb, var(--su-accent) 8%, var(--su-surface)); }
+.su-relation-picker { position: relative; }
+.su-relation-picker-trigger { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; cursor: pointer; }
+.su-relation-picker-menu { position: absolute; z-index: 80; top: calc(100% + 5px); left: 0; right: 0; min-width: min(28rem, 90vw); padding: 8px; border: 1px solid var(--su-border); border-radius: 10px; background: var(--su-surface); box-shadow: 0 16px 38px rgba(0,0,0,.16); }
+.su-relation-picker-options { max-height: 260px; overflow-y: auto; margin-top: 7px; display: grid; gap: 3px; }
+.su-relation-picker-option { width: 100%; border: 0; border-radius: 7px; padding: 9px 10px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.su-relation-picker-option:hover, .su-relation-picker-option:focus { background: var(--su-hover-bg); outline: none; }
+.su-relation-picker-empty { padding: 10px; color: var(--su-muted); font-size: 13px; }
+.su-relation-selected { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px; border: 1px solid var(--su-border); border-radius: 10px; }
 
 /* ServiceUp list-view image cells: never let media expand table rows.
    Applies to every tenant and every image-backed content type. */

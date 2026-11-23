@@ -11,6 +11,31 @@ router.get('/', async (req, res) => {
   const search = String(req.query.q || '').trim();
   const mime = String(req.query.mime || '').trim();
   try {
+    // Older CRM quick uploads created Document entries and Storage objects but
+    // did not register those objects in Pixels. Recover them lazily so existing
+    // tenant files appear in the library without a one-off migration.
+    await req.db.query(
+      `insert into pixels
+         (tenant_id, title, original_name, bucket, storage_path, public_url,
+          mime_type, size_bytes, uploaded_by, created_at)
+       select $1,
+              coalesce(nullif(e.data->>'document_name', ''), nullif(e.title, ''), nullif(e.data->'file'->>'name', ''), 'Untitled file'),
+              e.data->'file'->>'name',
+              e.data->'file'->>'bucket',
+              e.data->'file'->>'path',
+              nullif(e.data->'file'->>'publicUrl', ''),
+              nullif(e.data->'file'->>'mime', ''),
+              case when (e.data->'file'->>'size') ~ '^[0-9]+$' then (e.data->'file'->>'size')::bigint else null end,
+              $2,
+              e.created_at
+         from entries e
+         join content_types ct on ct.id = e.content_type_id
+        where ct.slug = 'documents'
+          and e.data->'file'->>'bucket' in ('uploads-public', 'uploads-private')
+          and e.data->'file'->>'path' like $1::text || '/%'
+       on conflict (tenant_id, bucket, storage_path) do nothing`,
+      [req.tenantId, req.user.id],
+    );
     const { rows } = await req.db.query(
       `select id, title, original_name, bucket, storage_path, public_url,
               mime_type, size_bytes, alt_text, caption, uploaded_by,

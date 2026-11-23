@@ -1162,6 +1162,11 @@ export default function QuickBuilderPage() {
                   <span className="font-medium">Search placeholder</span>
                   <input className="su-input" value={cfg.searchPlaceholder || ""} onChange={(e) => updateCfg({ searchPlaceholder: e.target.value })} placeholder="Search intended parents…" />
                 </label>
+                <label className="md:col-span-2 space-y-1">
+                  <span className="font-medium">Add button label</span>
+                  <input className="su-input" value={cfg.addLabel || ""} onChange={(e) => updateCfg({ addLabel: e.target.value })} placeholder="Add an Intended Parent" />
+                  <div className="text-[11px] text-gray-500">Leave blank to generate the wording from the related content type.</div>
+                </label>
               </div>
             </div>
 

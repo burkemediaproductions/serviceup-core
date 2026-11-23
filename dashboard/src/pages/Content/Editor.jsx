@@ -354,13 +354,21 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate, onAdd
           pathPrefix: `nbsg-documents/${typeSlug}/${canonicalParentId}`,
           makePublic: false,
         });
+        const pixel = await api.post("/api/pixels", {
+          title: file.name.replace(/\.[^.]+$/, "") || file.name,
+          original_name: file.name,
+          bucket: stored.bucket,
+          storage_path: stored.path,
+          mime_type: file.type,
+          size_bytes: file.size,
+        });
         const documentName = file.name.replace(/\.[^.]+$/, "") || file.name;
         const data = {
           document_name: documentName,
           document_type: config?.default_document_type || "Other",
           document_status: config?.default_document_status || "Received",
           date_received: new Date().toISOString().slice(0, 10),
-          file: { ...stored, name: file.name, mime: file.type, size: file.size },
+          file: { ...stored, pixelId: pixel.id, name: file.name, mime: file.type, size: file.size },
           [relationshipField]: canonicalParentId,
         };
         await api.post(`/api/content/${encodeURIComponent(sourceType)}`, {
@@ -438,6 +446,20 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate, onAdd
     }
   }
 
+  async function removeDocument(record) {
+    if (sourceType !== "documents") return;
+    const name = record?.data?.document_name || record?.title || "this document";
+    if (!window.confirm(`Remove “${name}” from this record?`)) return;
+    setError("");
+    try {
+      await api.del(`/api/content/${encodeURIComponent(sourceType)}/${encodeURIComponent(record.id)}`);
+      setRecords((current) => current.filter((item) => item.id !== record.id));
+      setUploadProgress("Document removed from this record. Its file remains available in Pixels.");
+    } catch (err) {
+      setError(err?.message || "Could not remove the document.");
+    }
+  }
+
   const valueFor = (record, key) => {
     if (key === "title") return record.title || record.slug;
     const value = record[key] ?? record.data?.[key];
@@ -494,6 +516,7 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate, onAdd
               {fields.map((field) => <span key={field}>{String(valueFor(record, field) ?? "")}</span>)}
             </button>
             {canPreview && <button type="button" className="su-btn primary" onClick={() => previewDocument(record)}>Preview</button>}
+            {sourceType === "documents" && <button type="button" className="su-btn danger" onClick={() => removeDocument(record)}>Remove</button>}
           </div>
         );
       })}

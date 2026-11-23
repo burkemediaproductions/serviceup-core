@@ -1,5 +1,5 @@
 // admin/src/components/FieldInput.jsx
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import RichTextEditor from "./RichTextEditor";
 import RichTextContent, { isRichTextDocument, richTextToPlainText } from "./RichTextContent";
 import { DateTime } from "luxon";
@@ -2707,7 +2707,24 @@ function RelationEntryField({
 
   const [inlineOpen, setInlineOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [pendingSelection, setPendingSelection] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef(null);
+
+  useEffect(() => {
+    if (!pickerOpen) return undefined;
+    const close = (event) => {
+      if (event.key === "Escape" || (event.type === "mousedown" && !pickerRef.current?.contains(event.target))) {
+        setPickerOpen(false);
+        setSearch("");
+      }
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [pickerOpen]);
 
   // try cache first
   const cached =
@@ -2830,6 +2847,68 @@ function RelationEntryField({
     return searchFields.some((path) => relationValue(ent, path).toLocaleLowerCase().includes(needle));
   });
 
+  function inferredRelatedName() {
+    const cleaned = String(relSlug || "related entry")
+      .replace(/-applications?$/i, "")
+      .replace(/-/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    return cleaned.replace(/s$/i, "") || "Related Entry";
+  }
+
+  const addLabel = String(cfg.addLabel || cfg.add_label || "").trim() || (() => {
+    const name = inferredRelatedName();
+    return `Add ${/^[aeiou]/i.test(name) ? "an" : "a"} ${name}`;
+  })();
+
+  function RelationshipPicker({ availableItems, onSelect }) {
+    return (
+      <div ref={pickerRef} className="su-relation-picker">
+        <button
+          type="button"
+          className="su-select su-relation-picker-trigger"
+          aria-haspopup="listbox"
+          aria-expanded={pickerOpen}
+          onClick={() => setPickerOpen((open) => !open)}
+        >
+          <span>+ {addLabel}</span><span aria-hidden="true">⌄</span>
+        </button>
+        {pickerOpen && (
+          <div className="su-relation-picker-menu">
+            <input
+              className="su-input"
+              type="search"
+              autoFocus
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={cfg.searchPlaceholder || `Search ${inferredRelatedName().toLowerCase()}…`}
+            />
+            <div className="su-relation-picker-options" role="listbox">
+              {loading && <div className="su-relation-picker-empty">Loading…</div>}
+              {!loading && availableItems.map((entry) => (
+                <button
+                  type="button"
+                  role="option"
+                  className="su-relation-picker-option"
+                  key={entry.id}
+                  onClick={() => {
+                    onSelect(String(entry.id));
+                    setPickerOpen(false);
+                    setSearch("");
+                  }}
+                >
+                  {labelFor(entry)}
+                </button>
+              ))}
+              {!loading && !availableItems.length && (
+                <div className="su-relation-picker-empty">No matching entries.</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function openRelated(id) {
     const destination = `/admin/content/${encodeURIComponent(String(relSlug))}/${encodeURIComponent(String(id))}`;
     if (typeof entryContext?.saveBeforeNavigate === "function") {
@@ -2850,21 +2929,12 @@ function RelationEntryField({
   if (!allowMultiple) {
     return (
       <div style={{ display: "grid", gap: 6 }}>
-        <input
-          className="su-input"
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={cfg.searchPlaceholder || "Search related entries…"}
-        />
-        <select className="su-select" value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
-          <option value="">— Select related —</option>
-          {filteredItems.map((ent) => (
-            <option key={ent.id} value={String(ent.id)}>
-              {labelFor(ent)}
-            </option>
-          ))}
-        </select>
+        {selectedId ? (
+          <div className="su-relation-selected">
+            <strong>{labelFor(items.find((entry) => String(entry.id) === selectedId) || { id: selectedId })}</strong>
+            <button type="button" className="su-btn danger" onClick={() => onChange("")}>Remove</button>
+          </div>
+        ) : RelationshipPicker({ availableItems: filteredItems, onSelect: onChange })}
 
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {selectedId && (
@@ -2941,29 +3011,6 @@ function RelationEntryField({
     : [];
   return (
     <div style={{ display: "grid", gap: 6 }}>
-      <input
-        className="su-input"
-        type="search"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder={cfg.searchPlaceholder || "Search related entries…"}
-      />
-      <select
-        className="su-select"
-        value={pendingSelection}
-        onChange={(e) => {
-          const selected = e.target.value;
-          if (selected && !current.includes(selected)) onChange([...current, selected]);
-          setPendingSelection("");
-        }}
-      >
-        <option value="">— Add a related entry —</option>
-        {filteredItems.filter((ent) => !current.includes(String(ent.id))).map((ent) => (
-          <option key={ent.id} value={String(ent.id)}>
-            {labelFor(ent)}
-          </option>
-        ))}
-      </select>
       {!!current.length && (
         <div style={{ display: "grid", gap: 8 }}>
           {current.map((id) => {
@@ -2983,6 +3030,10 @@ function RelationEntryField({
           })}
         </div>
       )}
+      {RelationshipPicker({
+        availableItems: filteredItems.filter((ent) => !current.includes(String(ent.id))),
+        onSelect: (selected) => onChange([...current, selected]),
+      })}
       <div style={{ fontSize: 11, opacity: 0.7 }}>
         Source: {relSlug} {loading ? "· loading…" : ""} {err ? `· ${err}` : ""}
       </div>
