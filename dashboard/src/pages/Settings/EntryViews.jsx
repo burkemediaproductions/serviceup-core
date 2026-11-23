@@ -46,6 +46,7 @@ const EMPTY_CORE = {
   // manual | template
   titleMode: "manual",
   titleTemplate: "",
+  defaultStatus: "draft",
 
   // hide core fields/panels in THIS VIEW (role-based because views are role-based)
   hideTitle: false,
@@ -577,6 +578,18 @@ const loadViewForEdit = (view) => {
     setDirty(true);
   };
 
+  const updateRelatedSection = (idx, patch) => {
+    setSections((prev) => {
+      const next = [...prev];
+      next[idx] = {
+        ...next[idx],
+        related: { ...(next[idx]?.related || {}), ...patch },
+      };
+      return next;
+    });
+    setDirty(true);
+  };
+
   const addFieldToSection = (fieldKey, sectionIdx) => {
     if (!fieldKey) return;
     setSections((prev) => {
@@ -937,6 +950,68 @@ if (newly) loadViewForEdit(newly);
           </div>
 
           <div>
+            <label className="su-form-label">Widget type</label>
+            <select
+              className="su-input"
+              value={sec.type === "related_records" ? "related_records" : "fields"}
+              onChange={(e) => {
+                const related = e.target.value === "related_records";
+                updateSection(selectedSectionIndex, "type", related ? "related_records" : "");
+                if (related && !sec.related) updateRelatedSection(selectedSectionIndex, { allow_create: true, quick_upload: false });
+              }}
+            >
+              <option value="fields">Field group</option>
+              <option value="related_records">Related records panel</option>
+            </select>
+          </div>
+
+          {sec.type === "related_records" && (
+            <div className="su-card" style={{ padding: 12 }}>
+              <div className="su-grid md:grid-cols-2 gap-sm">
+                <label className="su-form-label">
+                  Source content type
+                  <select
+                    className="su-input"
+                    value={sec.related?.source_type || ""}
+                    onChange={(e) => updateRelatedSection(selectedSectionIndex, { source_type: e.target.value })}
+                  >
+                    <option value="">Choose a content type…</option>
+                    {contentTypes.map((type) => <option key={type.id || type.slug} value={type.slug}>{type.name || type.label_plural || type.slug}</option>)}
+                  </select>
+                </label>
+                <label className="su-form-label">
+                  Relationship field key
+                  <input
+                    className="su-input"
+                    value={sec.related?.relationship_field || ""}
+                    onChange={(e) => updateRelatedSection(selectedSectionIndex, { relationship_field: e.target.value })}
+                    placeholder="surrogate"
+                  />
+                </label>
+                <label className="su-chip su-items-center su-gap-xs">
+                  <input
+                    type="checkbox"
+                    checked={sec.related?.allow_create !== false}
+                    onChange={(e) => updateRelatedSection(selectedSectionIndex, { allow_create: e.target.checked })}
+                  />
+                  Show “Add new” button
+                </label>
+                <label className="su-chip su-items-center su-gap-xs">
+                  <input
+                    type="checkbox"
+                    checked={sec.related?.quick_upload === true}
+                    onChange={(e) => updateRelatedSection(selectedSectionIndex, { quick_upload: e.target.checked })}
+                  />
+                  Enable document drag-and-drop
+                </label>
+              </div>
+              <div className="su-text-xs su-text-muted su-mt-sm">
+                Quick upload is available when the source content type is <code>documents</code>.
+              </div>
+            </div>
+          )}
+
+          {sec.type !== "related_records" && <div>
             <h4 className="su-text-sm su-font-semibold">Fields in this widget</h4>
             {sec.fields.length === 0 && (
               <p className="su-text-xs su-text-muted">No fields assigned.</p>
@@ -981,9 +1056,9 @@ if (newly) loadViewForEdit(newly);
                 );
               })}
             </div>
-          </div>
+          </div>}
 
-          <div>
+          {sec.type !== "related_records" && <div>
             <h4 className="su-text-sm su-font-semibold">Unassigned fields</h4>
             {unassignedFields.length === 0 && (
               <p className="su-text-xs su-text-muted">All fields assigned.</p>
@@ -1001,7 +1076,7 @@ if (newly) loadViewForEdit(newly);
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
         </div>
       );
     };
@@ -1183,6 +1258,25 @@ if (newly) loadViewForEdit(newly);
                       />
                       Hide Preview panel
                     </label>
+
+                    <div>
+                      <label className="su-form-label">Default status for new entries</label>
+                      <select
+                        className="su-input"
+                        value={core.defaultStatus || "draft"}
+                        onChange={(e) => {
+                          setCore((prev) => ({ ...prev, defaultStatus: e.target.value }));
+                          setDirty(true);
+                        }}
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="published">Published</option>
+                        <option value="archived">Archived</option>
+                      </select>
+                      <div className="su-text-xs su-text-muted">
+                        Applied automatically when a new entry is opened using this view.
+                      </div>
+                    </div>
 
                     <div>
                       <label className="su-form-label">Editor layout</label>

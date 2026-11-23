@@ -192,20 +192,27 @@ function documentPreviewKind(file) {
 }
 
 function RelatedDocumentPreview({ state, onClose }) {
+  const [fullScreen, setFullScreen] = useState(false);
   useEffect(() => {
     if (!state?.open) return undefined;
     const close = (event) => { if (event.key === "Escape") onClose(); };
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [state?.open, onClose]);
+  useEffect(() => {
+    if (!state?.open) setFullScreen(false);
+  }, [state?.open]);
   if (!state?.open) return null;
   return (
     <div role="dialog" aria-modal="true" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
       style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,.58)", padding: 16, display: "grid", placeItems: "center" }}>
-      <div style={{ width: "min(1100px,96vw)", height: "min(84vh,860px)", background: "var(--su-surface,#fff)", borderRadius: 14, overflow: "hidden", display: "grid", gridTemplateRows: "auto 1fr" }}>
+      <div style={{ width: fullScreen ? "100vw" : "min(1320px,97vw)", height: fullScreen ? "100vh" : "min(90vh,960px)", background: "var(--su-surface,#fff)", borderRadius: fullScreen ? 0 : 14, overflow: "hidden", display: "grid", gridTemplateRows: "auto 1fr" }}>
         <div style={{ padding: 12, borderBottom: "1px solid var(--su-border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <strong>{state.title || "Document preview"}</strong>
-          <button type="button" className="su-btn" onClick={onClose}>Close</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="su-btn" onClick={() => setFullScreen((value) => !value)}>{fullScreen ? "Exit full screen" : "Full screen"}</button>
+            <button type="button" className="su-btn" onClick={onClose}>Close</button>
+          </div>
         </div>
         <div style={{ position: "relative" }}>
           {state.loading ? <div style={{ padding: 18 }}>Loading preview…</div>
@@ -217,7 +224,7 @@ function RelatedDocumentPreview({ state, onClose }) {
   );
 }
 
-function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate }) {
+function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate, onAddNew }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -346,7 +353,7 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate }) {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
         <strong style={{ fontSize: 13 }}>{title || "Related records"}</strong>
         {config?.allow_create !== false && sourceType && (
-          <button type="button" className="su-btn" onClick={() => navigate(`/admin/content/${sourceType}/new`)}>Add new</button>
+          <button type="button" className="su-btn" onClick={() => onAddNew ? onAddNew(sourceType) : navigate(`/admin/content/${sourceType}/new`)}>Add new</button>
         )}
       </div>
       {quickUploadEnabled && (
@@ -504,6 +511,7 @@ export default function Editor() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
+  const [pendingNavigation, setPendingNavigation] = useState("");
 
   // Core entry fields
   const [title, setTitle] = useState("");
@@ -548,6 +556,9 @@ export default function Editor() {
       hidePreview: !!c.hidePreview,
       layout: ["stacked", "toggle"].includes(c.layout) ? c.layout : "split",
       richTextLarge: !!c.richTextLarge,
+      defaultStatus: ["draft", "published", "archived"].includes(String(c.defaultStatus || "").toLowerCase())
+        ? String(c.defaultStatus).toLowerCase()
+        : "draft",
       autoSlugFromTitleIfEmpty: c.autoSlugFromTitleIfEmpty !== false,
     };
   }, [editorViewConfig]);
@@ -784,7 +795,7 @@ export default function Editor() {
     if (isNew) {
       setTitle("");
       setSlug("");
-      setStatus("draft");
+      setStatus(coreCfg.defaultStatus || "draft");
       setData({});
       setResolved(null);
       setLoadingEntry(false);
@@ -869,7 +880,17 @@ export default function Editor() {
     return () => {
       cancelled = true;
     };
-  }, [isNew, typeSlug, entryId]);
+  }, [isNew, typeSlug, entryId, coreCfg.defaultStatus]);
+
+  function handleAddRelated(sourceType) {
+    const destination = `/admin/content/${sourceType}/new`;
+    const shouldSave = window.confirm(
+      "Save this entry before opening a new related record?\n\nChoose OK to save and continue, or Cancel to stay on this entry."
+    );
+    if (!shouldSave) return;
+    setPendingNavigation(destination);
+    window.setTimeout(() => document.getElementById("serviceup-entry-form")?.requestSubmit(), 0);
+  }
 
   // ---------------------------------------------------------------------------
   // ✅ Derive Title live from template (if enabled in view)
@@ -952,7 +973,8 @@ export default function Editor() {
           created?.slug ?? created?.entry?.slug ?? created?.data?.slug ?? finalSlug;
 
         if (newId) {
-          navigate(`/admin/content/${typeSlug}/${newSlug || newId}`, { replace: true });
+          navigate(pendingNavigation || `/admin/content/${typeSlug}/${newSlug || newId}`, { replace: true });
+          setPendingNavigation("");
           setSaveMessage("Entry created.");
         } else {
           setSaveMessage("Entry created (reload list to see it).");
@@ -982,16 +1004,22 @@ export default function Editor() {
           setStatus(loadedStatus);
           setData(entryData);
 
-          if (loadedSlug && loadedSlug !== entryId) {
+          if (!pendingNavigation && loadedSlug && loadedSlug !== entryId) {
             navigate(`/admin/content/${typeSlug}/${loadedSlug}`, { replace: true });
           }
         }
 
         setSaveMessage("Entry saved.");
+        if (pendingNavigation) {
+          const destination = pendingNavigation;
+          setPendingNavigation("");
+          navigate(destination);
+        }
       }
     } catch (err) {
       console.error("Failed to save entry", err);
       setError(err.message || "Failed to save entry");
+      setPendingNavigation("");
     } finally {
       setSaving(false);
     }
@@ -1189,7 +1217,7 @@ export default function Editor() {
           </div>
         )}
 
-        <form onSubmit={handleSave}>
+        <form id="serviceup-entry-form" onSubmit={handleSave}>
           {/* Core fields */}
           <div className={coreCfg.layout === "stacked" ? "su-entry-core-row" : ""} style={{ display: "grid", gap: 12, marginBottom: 20 }}>
             {!coreCfg.hideTitle && (
@@ -1265,6 +1293,7 @@ export default function Editor() {
                 typeSlug={typeSlug}
                 entryId={entryId}
                 navigate={navigate}
+                onAddNew={handleAddRelated}
               />
             ) : (
               <div

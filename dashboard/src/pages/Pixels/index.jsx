@@ -20,16 +20,18 @@ function previewKind(pixel) {
 }
 
 function PixelDocumentPreview({ state, onClose }) {
+  const [fullScreen, setFullScreen] = useState(false);
   useEffect(() => {
     if (!state.open) return undefined;
     const key = (event) => { if (event.key === 'Escape') onClose(); };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, [state.open, onClose]);
+  useEffect(() => { if (!state.open) setFullScreen(false); }, [state.open]);
   if (!state.open) return null;
   return <div role="dialog" aria-modal="true" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} style={{position:'fixed',inset:0,zIndex:9999,background:'rgba(0,0,0,.58)',display:'grid',placeItems:'center',padding:16}}>
-    <div style={{width:'min(1100px,96vw)',height:'min(84vh,860px)',background:'var(--su-surface,#fff)',borderRadius:14,overflow:'hidden',display:'grid',gridTemplateRows:'auto 1fr'}}>
-      <div style={{padding:12,borderBottom:'1px solid var(--su-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}><strong>{state.title || 'Document preview'}</strong><button className="su-btn" type="button" onClick={onClose}>Close</button></div>
+    <div style={{width:fullScreen?'100vw':'min(1320px,97vw)',height:fullScreen?'100vh':'min(90vh,960px)',background:'var(--su-surface,#fff)',borderRadius:fullScreen?0:14,overflow:'hidden',display:'grid',gridTemplateRows:'auto 1fr'}}>
+      <div style={{padding:12,borderBottom:'1px solid var(--su-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}><strong>{state.title || 'Document preview'}</strong><div style={{display:'flex',gap:8}}><button className="su-btn" type="button" onClick={()=>setFullScreen((value)=>!value)}>{fullScreen?'Exit full screen':'Full screen'}</button><button className="su-btn" type="button" onClick={onClose}>Close</button></div></div>
       <div style={{position:'relative'}}>{state.loading ? <div style={{padding:18}}>Loading preview…</div> : state.error ? <div style={{padding:18,color:'#b91c1c'}}>{state.error}</div> : <iframe title="Document preview" src={state.url} style={{width:'100%',height:'100%',border:0}} />}</div>
     </div>
   </div>;

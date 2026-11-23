@@ -581,6 +581,91 @@ function optionalAuth(req, res, next) {
 
 /* ----------------------- Entries ----------------------------------- */
 
+function relationshipIds(value) {
+  const values = Array.isArray(value) ? value : [value];
+  return [...new Set(values.map((item) => {
+    if (item && typeof item === 'object') return item.id || item.value || '';
+    return item || '';
+  }).map((item) => String(item).trim()).filter(isUuid))];
+}
+
+function relationshipTargetSlug(config = {}) {
+  const relation = config?.relation && typeof config.relation === 'object' ? config.relation : {};
+  const raw = relation.content_type_slug || relation.contentType || relation.content_type || relation.slug ||
+    config.relatedType || config.content_type || config.contentType || config.targetType || config.target;
+  return typeof raw === 'object' ? raw.slug || raw.content_type || raw.relatedType : raw;
+}
+
+async function syncTwoWayRelationships(db, typeId, entryId, previousData = {}, nextData = {}) {
+  const definitions = (await db.query(
+    `select field_key,config from content_fields
+     where content_type_id=$1 and lower(type) in ('relation','relationship')`,
+    [typeId]
+  )).rows;
+
+  for (const definition of definitions) {
+    const config = definition.config || {};
+    const enabled = config.twoWay === true || config.two_way === true;
+    const inverseKey = String(config.inverseKey || config.inverse_key || '').trim();
+    const targetSlug = String(relationshipTargetSlug(config) || '').trim();
+    if (!enabled || !inverseKey || !targetSlug) continue;
+
+    const targetType = (await db.query('select id from content_types where slug=$1 limit 1', [targetSlug])).rows[0];
+    if (!targetType) continue;
+    const inverseDefinition = (await db.query(
+      `select config from content_fields where content_type_id=$1 and field_key=$2
+       and lower(type) in ('relation','relationship') limit 1`,
+      [targetType.id, inverseKey]
+    )).rows[0];
+    if (!inverseDefinition) continue;
+
+    const oldIds = relationshipIds(previousData?.[definition.field_key]);
+    const newIds = relationshipIds(nextData?.[definition.field_key]);
+    const removed = oldIds.filter((id) => !newIds.includes(id));
+    const added = newIds.filter((id) => !oldIds.includes(id));
+    const inverseConfig = inverseDefinition.config || {};
+    const inverseMultiple = inverseConfig.multiple === true;
+
+    for (const targetId of removed) {
+      if (inverseMultiple) {
+        await db.query(
+          `update entries set data=jsonb_set(coalesce(data,'{}'::jsonb),$1::text[],
+             coalesce((select jsonb_agg(value) from jsonb_array_elements(
+               case when jsonb_typeof(coalesce(data-> $2,'[]'::jsonb))='array' then coalesce(data-> $2,'[]'::jsonb) else '[]'::jsonb end
+             ) value where value <> to_jsonb($3::text)),'[]'::jsonb),true),updated_at=now()
+           where id=$4 and content_type_id=$5`,
+          [[inverseKey], inverseKey, entryId, targetId, targetType.id]
+        );
+      } else {
+        await db.query(
+          `update entries set data=jsonb_set(coalesce(data,'{}'::jsonb),$1::text[],'null'::jsonb,true),updated_at=now()
+           where id=$2 and content_type_id=$3 and data->>$4=$5`,
+          [[inverseKey], targetId, targetType.id, inverseKey, entryId]
+        );
+      }
+    }
+
+    for (const targetId of added) {
+      if (inverseMultiple) {
+        await db.query(
+          `update entries set data=jsonb_set(coalesce(data,'{}'::jsonb),$1::text[],
+             case when coalesce(data-> $2,'[]'::jsonb) @> to_jsonb(array[$3::text])
+               then coalesce(data-> $2,'[]'::jsonb)
+               else coalesce(data-> $2,'[]'::jsonb) || to_jsonb($3::text) end,true),updated_at=now()
+           where id=$4 and content_type_id=$5`,
+          [[inverseKey], inverseKey, entryId, targetId, targetType.id]
+        );
+      } else {
+        await db.query(
+          `update entries set data=jsonb_set(coalesce(data,'{}'::jsonb),$1::text[],to_jsonb($2::text),true),updated_at=now()
+           where id=$3 and content_type_id=$4`,
+          [[inverseKey], entryId, targetId, targetType.id]
+        );
+      }
+    }
+  }
+}
+
 // List entries for a content type
 app.get('/api/content/:slug', optionalAuth, async (req, res) => {
   const { slug } = req.params;
@@ -653,7 +738,10 @@ app.post('/api/content/:slug', authMiddleware, async (req, res) => {
     const finalSlug =
       typeof entrySlug === 'string' && entrySlug.trim() ? entrySlug.trim() : slugify(safeTitle);
 
-    const finalStatus = typeof status === 'string' && status.trim() ? status.trim() : 'draft';
+    const configuredDefaultStatus = ['draft', 'published', 'archived'].includes(String(core?.defaultStatus || '').toLowerCase())
+      ? String(core.defaultStatus).toLowerCase()
+      : 'draft';
+    const finalStatus = typeof status === 'string' && status.trim() ? status.trim() : configuredDefaultStatus;
 
     const { rows: fieldsRows } = await req.db.query(
       'SELECT field_key AS key, type FROM content_fields WHERE content_type_id = $1',
@@ -668,6 +756,8 @@ app.post('/api/content/:slug', authMiddleware, async (req, res) => {
        RETURNING *`,
       [typeId, safeTitle, finalSlug, finalStatus, normalizedData]
     );
+
+    await syncTwoWayRelationships(req.db, typeId, rows[0].id, {}, normalizedData);
 
     await attachResolvedUsersToEntries(req.db, req.tenantId, typeId, rows[0]);
     scheduleSiteRebuild(req.tenant, `created ${typeSlug}/${finalSlug}`);
@@ -768,6 +858,13 @@ app.put('/api/content/:slug/:id', authMiddleware, async (req, res) => {
 
     const normalizedData = normalizeEntryData(fieldsRows, data || {});
 
+    const previous = await req.db.query(
+      isUuid(id)
+        ? 'select id,data from entries where id=$1 and content_type_id=$2 limit 1'
+        : 'select id,data from entries where slug=$1 and content_type_id=$2 limit 1',
+      [id, typeId]
+    );
+
     const updated = isUuid(id)
       ? await req.db.query(
           `UPDATE entries
@@ -785,6 +882,14 @@ app.put('/api/content/:slug/:id', authMiddleware, async (req, res) => {
         );
 
     if (!updated.rows.length) return res.status(404).json({ error: 'Entry not found' });
+
+    await syncTwoWayRelationships(
+      req.db,
+      typeId,
+      updated.rows[0].id,
+      previous.rows[0]?.data || {},
+      normalizedData
+    );
 
     await attachResolvedUsersToEntries(req.db, req.tenantId, typeId, updated.rows[0]);
     scheduleSiteRebuild(req.tenant, `updated ${typeSlug}/${finalSlug}`);
@@ -817,6 +922,14 @@ app.delete('/api/content/:slug/:id', authMiddleware, async (req, res) => {
     );
     if (!typeRes.rows.length) return res.status(404).json({ error: 'Not found' });
     const typeId = typeRes.rows[0].id;
+    const existing = await req.db.query(
+      isUuid(id)
+        ? 'select id,data from entries where id=$1 and content_type_id=$2 limit 1'
+        : 'select id,data from entries where slug=$1 and content_type_id=$2 limit 1',
+      [id, typeId]
+    );
+    if (!existing.rows.length) return res.status(404).json({ error: 'Not found' });
+    await syncTwoWayRelationships(req.db, typeId, existing.rows[0].id, existing.rows[0].data || {}, {});
 
     if (isUuid(id)) {
       await req.db.query('DELETE FROM entry_versions WHERE entry_id = $1', [id]);
@@ -853,6 +966,15 @@ app.delete('/api/content/:slug/:id', authMiddleware, async (req, res) => {
 app.delete('/api/content/:id', authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
+    const existing = await req.db.query('select id,content_type_id,data from entries where id=$1 limit 1', [id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Not found' });
+    await syncTwoWayRelationships(
+      req.db,
+      existing.rows[0].content_type_id,
+      existing.rows[0].id,
+      existing.rows[0].data || {},
+      {}
+    );
     await req.db.query('DELETE FROM entry_versions WHERE entry_id = $1', [id]);
     const del = await req.db.query('DELETE FROM entries WHERE id = $1 RETURNING id', [id]);
     if (!del.rows.length) return res.status(404).json({ error: 'Not found' });

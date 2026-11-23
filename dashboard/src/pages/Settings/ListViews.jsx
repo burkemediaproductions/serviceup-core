@@ -69,6 +69,8 @@ export default function ListViewsSettings() {
   const [sortDirection, setSortDirection] = useState('desc');
   const [secondarySortField, setSecondarySortField] = useState('');
   const [secondarySortDirection, setSecondarySortDirection] = useState('desc');
+  const [horizontalScroll, setHorizontalScroll] = useState(false);
+  const [tableMinWidth, setTableMinWidth] = useState(1200);
 
   const [availableFields, setAvailableFields] = useState([]);
 
@@ -93,6 +95,12 @@ export default function ListViewsSettings() {
     setSortDirection(sort.direction === 'asc' ? 'asc' : 'desc');
     setSecondarySortField(String(sort.secondaryField || ''));
     setSecondarySortDirection(sort.secondaryDirection === 'asc' ? 'asc' : 'desc');
+  };
+
+  const applyTableDisplayConfig = (view) => {
+    const display = view?.config?.table || {};
+    setHorizontalScroll(display.horizontal_scroll === true);
+    setTableMinWidth(Math.max(600, Number(display.min_width || 1200)));
   };
 
   // ---------------------------------------------
@@ -278,6 +286,7 @@ export default function ListViewsSettings() {
       setTitleFieldKey('');
       setTitleTemplate('');
           applySortConfig(null);
+          applyTableDisplayConfig(null);
           setDirty(false);
         } else {
           // Pick default or first view
@@ -323,6 +332,7 @@ export default function ListViewsSettings() {
           setTitleFieldKey(String(tCfg.fieldKey || ""));
           setTitleTemplate(String(tCfg.template || ""));
           applySortConfig(def);
+          applyTableDisplayConfig(def);
         }
       } catch (err) {
         console.error("[ListViews] load views error", err);
@@ -397,6 +407,7 @@ export default function ListViewsSettings() {
       setColumns(defaultCols);
     }
     applySortConfig(v);
+    applyTableDisplayConfig(v);
     setDirty(false);
     setSaveMessage("");
     setError("");
@@ -421,6 +432,7 @@ export default function ListViewsSettings() {
     setAssignedRoles([role]);
     setDefaultRoles([role]);
     applySortConfig(null);
+    applyTableDisplayConfig(null);
 
     if (!columns || !columns.length) {
       const defaultCols = [
@@ -622,6 +634,10 @@ export default function ListViewsSettings() {
             secondaryField: secondarySortField,
             secondaryDirection: secondarySortDirection,
           },
+          table: {
+            horizontal_scroll: horizontalScroll,
+            min_width: Math.max(600, Number(tableMinWidth || 1200)),
+          },
         },
       };
       // Send a single PUT request with all roles and default roles
@@ -670,6 +686,7 @@ export default function ListViewsSettings() {
               ];
           setColumns(cfgCols);
           applySortConfig(next);
+          applyTableDisplayConfig(next);
         } else {
           // fallback to default layout
           setActiveViewSlug('default');
@@ -683,6 +700,7 @@ export default function ListViewsSettings() {
             { key: 'updated_at', label: 'Updated' },
           ]);
           applySortConfig(null);
+          applyTableDisplayConfig(null);
         }
       } catch (reloadErr) {
         console.error('[ListViews] reload after save error', reloadErr);
@@ -1205,6 +1223,37 @@ export default function ListViewsSettings() {
                   Entries without a value for the selected field appear last.
                 </small>
               </div>
+            </div>
+          </div>
+
+          <div className="su-card">
+            <div className="su-card-header">
+              <h2 className="su-card-title">Table width</h2>
+              <p className="su-card-subtitle">
+                Keep additional columns readable by allowing the list to scroll horizontally.
+              </p>
+            </div>
+            <div className="su-card-body su-grid su-gap-sm">
+              <label className="su-chip su-items-center su-gap-xs">
+                <input
+                  type="checkbox"
+                  checked={horizontalScroll}
+                  onChange={(e) => { setHorizontalScroll(e.target.checked); setDirty(true); }}
+                />
+                Enable horizontal scrolling for this view
+              </label>
+              <label className="su-label">
+                Minimum table width (pixels)
+                <input
+                  className="su-input"
+                  type="number"
+                  min="600"
+                  step="100"
+                  value={tableMinWidth}
+                  disabled={!horizontalScroll}
+                  onChange={(e) => { setTableMinWidth(e.target.value); setDirty(true); }}
+                />
+              </label>
             </div>
           </div>
 

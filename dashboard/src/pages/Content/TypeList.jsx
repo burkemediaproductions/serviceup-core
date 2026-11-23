@@ -438,6 +438,10 @@ export default function TypeList() {
     return BUILTIN_KEYS;
   }, [columns]);
 
+  const tableDisplay = activeView?.config?.table || {};
+  const horizontalScroll = tableDisplay.horizontal_scroll === true;
+  const tableMinWidth = Math.max(600, Number(tableDisplay.min_width || 1200));
+
   // Optional per-view filters. Filters are configured in a list view, so a
   // bookmarked `?view=...` URL and a tenant sidebar link return the same rows.
   // Whitelisted operators only; no client-provided JavaScript or SQL.
@@ -790,7 +794,7 @@ export default function TypeList() {
 
           {!!rows.length && (
             <div className="su-table-wrapper">
-              <table className="su-table">
+              <table className="su-table" style={horizontalScroll ? { minWidth: `${tableMinWidth}px` } : undefined}>
                 <thead>
                   <tr>
                     {displayColumns.map((key) => (

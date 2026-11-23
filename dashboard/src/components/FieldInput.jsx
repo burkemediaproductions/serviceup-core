@@ -23,6 +23,8 @@ import { previewAssetUrl } from "../utils/previewAssets";
 /** ---------- Helpers ---------- */
 
 function Modal({ open, title, onClose, children }) {
+  const [fullScreen, setFullScreen] = useState(false);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => {
@@ -31,6 +33,10 @@ function Modal({ open, title, onClose, children }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) setFullScreen(false);
+  }, [open]);
 
   if (!open) return null;
 
@@ -53,10 +59,10 @@ function Modal({ open, title, onClose, children }) {
     >
       <div
         style={{
-          width: "min(1100px, 96vw)",
-          height: "min(80vh, 820px)",
+          width: fullScreen ? "100vw" : "min(1320px, 97vw)",
+          height: fullScreen ? "100vh" : "min(90vh, 960px)",
           background: "var(--su-surface, #fff)",
-          borderRadius: 14,
+          borderRadius: fullScreen ? 0 : 14,
           boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
           overflow: "hidden",
           display: "grid",
@@ -76,14 +82,24 @@ function Modal({ open, title, onClose, children }) {
           <div style={{ fontWeight: 700, fontSize: 14, opacity: 0.9 }}>
             {title || "Preview"}
           </div>
-          <button
-            type="button"
-            className="su-btn"
-            onClick={onClose}
-            style={{ padding: "6px 10px" }}
-          >
-            Close
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              className="su-btn"
+              onClick={() => setFullScreen((value) => !value)}
+              style={{ padding: "6px 10px" }}
+            >
+              {fullScreen ? "Exit full screen" : "Full screen"}
+            </button>
+            <button
+              type="button"
+              className="su-btn"
+              onClick={onClose}
+              style={{ padding: "6px 10px" }}
+            >
+              Close
+            </button>
+          </div>
         </div>
 
         <div style={{ position: "relative" }}>{children}</div>
@@ -2773,6 +2789,15 @@ function RelationEntryField({
         </select>
 
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {selectedId && (
+            <a
+              className="su-btn"
+              href={`/admin/content/${encodeURIComponent(String(relSlug))}/${encodeURIComponent(selectedId)}`}
+              style={{ padding: "6px 10px", textDecoration: "none" }}
+            >
+              Open selected
+            </a>
+          )}
           {(() => {
             const mode = inlineCfg?.mode || "modal"; // "inline" | "modal" | "both"
             const showButton =
@@ -2857,6 +2882,23 @@ function RelationEntryField({
           </option>
         ))}
       </select>
+      {!!current.length && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {current.map((id) => {
+            const item = items.find((entry) => String(entry.id) === id);
+            return (
+              <a
+                key={id}
+                className="su-btn"
+                href={`/admin/content/${encodeURIComponent(String(relSlug))}/${encodeURIComponent(id)}`}
+                style={{ padding: "6px 10px", textDecoration: "none" }}
+              >
+                Open {item ? labelFor(item) : "related entry"}
+              </a>
+            );
+          })}
+        </div>
+      )}
       <div style={{ fontSize: 11, opacity: 0.7 }}>
         Source: {relSlug} {loading ? "· loading…" : ""} {err ? `· ${err}` : ""}
       </div>
