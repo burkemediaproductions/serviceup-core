@@ -1126,6 +1126,45 @@ export default function QuickBuilderPage() {
               </label>
             </div>
 
+            <div className="mb-4 rounded-lg border border-gray-200 bg-white p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                Picker display &amp; search
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="font-medium">Primary display field</span>
+                  <select className="su-input" value={cfg.displayField || "title"} onChange={(e) => updateCfg({ displayField: e.target.value })}>
+                    <option value="title">Entry title</option>
+                    <option value="slug">Entry slug</option>
+                    {relatedFieldOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="font-medium">Secondary display field</span>
+                  <select className="su-input" value={cfg.secondaryField || ""} onChange={(e) => updateCfg({ secondaryField: e.target.value })}>
+                    <option value="">None</option>
+                    <option value="title">Entry title</option>
+                    <option value="slug">Entry slug</option>
+                    {relatedFieldOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+                  </select>
+                </label>
+                <label className="md:col-span-2 space-y-1">
+                  <span className="font-medium">Custom label template (optional)</span>
+                  <input className="su-input" value={cfg.labelTemplate || ""} onChange={(e) => updateCfg({ labelTemplate: e.target.value })} placeholder="{title}[ — Partner: {partner_name}]" />
+                  <div className="text-[11px] text-gray-500">Use field tokens for a fully custom label. Put optional text in brackets; it disappears when its field is empty.</div>
+                </label>
+                <label className="md:col-span-2 space-y-1">
+                  <span className="font-medium">Search fields</span>
+                  <input className="su-input" value={cfg.searchFields || ""} onChange={(e) => updateCfg({ searchFields: e.target.value })} placeholder="title, partner_name, email" />
+                  <div className="text-[11px] text-gray-500">Comma-separated field keys searched by the relationship picker.</div>
+                </label>
+                <label className="md:col-span-2 space-y-1">
+                  <span className="font-medium">Search placeholder</span>
+                  <input className="su-input" value={cfg.searchPlaceholder || ""} onChange={(e) => updateCfg({ searchPlaceholder: e.target.value })} placeholder="Search intended parents…" />
+                </label>
+              </div>
+            </div>
+
             {/* ✅ OPTION B: Inline Edit UI for relationship fields */}
             <div className="mb-4 rounded-lg border border-gray-200 bg-white p-3">
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">

@@ -224,6 +224,61 @@ function RelatedDocumentPreview({ state, onClose }) {
   );
 }
 
+function RelatedDocumentPixelPicker({ open, onClose, onSelect }) {
+  const [items, setItems] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let active = true;
+    setLoading(true);
+    setError("");
+    api.get("/api/pixels")
+      .then((result) => {
+        if (!active) return;
+        const list = Array.isArray(result) ? result : result?.data || [];
+        setItems(list.filter((pixel) => documentPreviewKind({
+          mime: pixel.mime_type,
+          name: pixel.original_name,
+          path: pixel.storage_path,
+        })));
+      })
+      .catch((err) => active && setError(err?.message || "Could not load Pixels."))
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [open]);
+
+  if (!open) return null;
+  const needle = query.trim().toLocaleLowerCase();
+  const visible = items.filter((pixel) => !needle || `${pixel.title || ""} ${pixel.original_name || ""}`.toLocaleLowerCase().includes(needle));
+  return (
+    <div role="dialog" aria-modal="true" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,.58)", display: "grid", placeItems: "center", padding: 16 }}>
+      <div style={{ width: "min(900px,96vw)", maxHeight: "88vh", overflow: "auto", background: "var(--su-surface,#fff)", borderRadius: 14, padding: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <strong>Choose from Pixels / Media Library</strong>
+          <button type="button" className="su-btn" onClick={onClose}>Close</button>
+        </div>
+        <input className="su-input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search documents…" style={{ marginTop: 12 }} />
+        {loading && <p className="su-text-muted">Loading documents…</p>}
+        {error && <p style={{ color: "#991b1b" }}>{error}</p>}
+        {!loading && !error && !visible.length && <p className="su-text-muted">No PDF or Word documents found in Pixels.</p>}
+        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          {visible.map((pixel) => (
+            <button key={pixel.id} type="button" className="su-btn" onClick={() => onSelect(pixel)}
+              style={{ display: "flex", justifyContent: "space-between", textAlign: "left", gap: 12, padding: 12 }}>
+              <span><strong>{pixel.title || pixel.original_name}</strong><br /><small>{pixel.original_name || pixel.storage_path}</small></span>
+              <span>{pixel.bucket === "uploads-private" ? "Private" : "Public"}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate, onAddNew }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -233,6 +288,7 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate, onAdd
   const [dragOver, setDragOver] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [documentPreview, setDocumentPreview] = useState({ open: false, loading: false, url: "", error: "", title: "" });
+  const [pixelPickerOpen, setPixelPickerOpen] = useState(false);
   const sourceType = config?.source_type || config?.sourceType;
   const relationshipField = config?.relationship_field || config?.relationshipField;
   const fields = Array.isArray(config?.display_fields) ? config.display_fields : ["title", "status"];
@@ -324,6 +380,48 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate, onAdd
     }
   }
 
+  async function attachPixel(pixel) {
+    if (!pixel?.bucket || !pixel?.storage_path || uploading) return;
+    setUploading(true);
+    setError("");
+    try {
+      const parent = await api.get(`/api/content/${encodeURIComponent(typeSlug)}/${encodeURIComponent(entryId)}`);
+      const canonicalParentId = parent?.id || entryId;
+      const filename = pixel.original_name || pixel.title || "Document";
+      const documentName = filename.replace(/\.[^.]+$/, "") || filename;
+      await api.post(`/api/content/${encodeURIComponent(sourceType)}`, {
+        title: documentName,
+        slug: `${slugify(documentName)}-${Date.now()}`,
+        status: "published",
+        data: {
+          document_name: documentName,
+          document_type: config?.default_document_type || "Other",
+          document_status: config?.default_document_status || "Received",
+          date_received: new Date().toISOString().slice(0, 10),
+          file: {
+            pixelId: pixel.id,
+            bucket: pixel.bucket,
+            path: pixel.storage_path,
+            publicUrl: pixel.public_url || "",
+            name: filename,
+            title: pixel.title || documentName,
+            caption: pixel.caption || "",
+            mime: pixel.mime_type || "",
+            size: pixel.size_bytes || 0,
+          },
+          [relationshipField]: canonicalParentId,
+        },
+      });
+      setPixelPickerOpen(false);
+      setUploadProgress("Document attached from Pixels.");
+      setRefreshKey((value) => value + 1);
+    } catch (err) {
+      setError(err?.message || "Could not attach the Pixel document.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function previewDocument(record) {
     const file = record?.data?.file;
     const kind = documentPreviewKind(file);
@@ -358,6 +456,7 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate, onAdd
       </div>
       {quickUploadEnabled && (
         entryId && entryId !== "new" ? (
+          <div>
           <div
             onDragEnter={(event) => { event.preventDefault(); if (!uploading) setDragOver(true); }}
             onDragOver={(event) => { event.preventDefault(); if (!uploading) setDragOver(true); }}
@@ -368,9 +467,14 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate, onAdd
             <input id={`related-documents-${relationshipField}`} type="file" multiple accept={acceptedDocuments} disabled={uploading}
               style={{ display: "none" }} onChange={(event) => { uploadDocuments(event.target.files); event.target.value = ""; }} />
             <label htmlFor={`related-documents-${relationshipField}`} style={{ cursor: uploading ? "wait" : "pointer", fontWeight: 600 }}>
-              {uploading ? uploadProgress : "Drop documents here, or click to choose files"}
+              {uploading ? uploadProgress : "Drop documents here"}
             </label>
             <div className="su-text-muted" style={{ fontSize: 11, marginTop: 4 }}>PDF, DOC or DOCX · up to {maxDocumentMB} MB each · private storage</div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            <label htmlFor={`related-documents-${relationshipField}`} className="su-btn primary" style={{ cursor: uploading ? "wait" : "pointer" }}>Upload from computer</label>
+            <button type="button" className="su-btn" disabled={uploading} onClick={() => setPixelPickerOpen(true)}>Choose from Pixels / Media Library</button>
+          </div>
           </div>
         ) : (
           <div className="su-text-muted" style={{ marginBottom: 10 }}>Save this record before attaching documents.</div>
@@ -394,6 +498,7 @@ function RelatedRecordsPanel({ title, config, typeSlug, entryId, navigate, onAdd
         );
       })}
       <RelatedDocumentPreview state={documentPreview} onClose={() => setDocumentPreview({ open: false, loading: false, url: "", error: "", title: "" })} />
+      <RelatedDocumentPixelPicker open={pixelPickerOpen} onClose={() => setPixelPickerOpen(false)} onSelect={attachPixel} />
     </div>
   );
 }
@@ -882,14 +987,20 @@ export default function Editor() {
     };
   }, [isNew, typeSlug, entryId, coreCfg.defaultStatus]);
 
-  function handleAddRelated(sourceType) {
-    const destination = `/admin/content/${sourceType}/new`;
+  function saveBeforeNavigate(destination, message = "Save this entry before continuing?") {
     const shouldSave = window.confirm(
-      "Save this entry before opening a new related record?\n\nChoose OK to save and continue, or Cancel to stay on this entry."
+      `${message}\n\nChoose OK to save and continue, or Cancel to stay on this entry.`
     );
     if (!shouldSave) return;
     setPendingNavigation(destination);
     window.setTimeout(() => document.getElementById("serviceup-entry-form")?.requestSubmit(), 0);
+  }
+
+  function handleAddRelated(sourceType) {
+    saveBeforeNavigate(
+      `/admin/content/${sourceType}/new`,
+      "Save this entry before opening a new related record?"
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1341,7 +1452,14 @@ export default function Editor() {
                             relatedCache={relatedCache}
                             choicesCache={choicesCache}
                             resolved={resolved}
-                            entryContext={{ typeSlug, entryId }}
+                            entryContext={{
+                              typeSlug,
+                              entryId,
+                              saveBeforeNavigate: (destination) => saveBeforeNavigate(
+                                destination,
+                                "Save this entry before opening the related record?"
+                              ),
+                            }}
                           />
 
                           {(def.help || def.description) && (

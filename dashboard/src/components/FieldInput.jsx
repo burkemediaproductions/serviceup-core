@@ -108,11 +108,14 @@ function Modal({ open, title, onClose, children }) {
   );
 }
 
-function PixelPicker({ open, onClose, onSelect, mimePrefix = '' }) {
+function PixelPicker({ open, onClose, onSelect, mimePrefix = '', accept = '' }) {
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState('');
   useEffect(() => { if (open) api.get(`/api/pixels${mimePrefix ? `?mime=${encodeURIComponent(mimePrefix)}` : ''}`).then(setItems).catch(() => setItems([])); }, [open, mimePrefix]);
-  const visible = items.filter((item) => !query || `${item.title} ${item.original_name}`.toLowerCase().includes(query.toLowerCase()));
+  const visible = items.filter((item) => {
+    if (accept && !validateFileAgainstAccept({ name: item.original_name || item.storage_path || '', type: item.mime_type || '' }, accept)) return false;
+    return !query || `${item.title} ${item.original_name}`.toLowerCase().includes(query.toLowerCase());
+  });
   return <Modal open={open} onClose={onClose} title="Choose from Pixels"><div style={{padding:16}}><input className="su-input" type="search" placeholder="Search Pixels" value={query} onChange={(e)=>setQuery(e.target.value)}/><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:12,marginTop:14}}>{visible.map((pixel)=><button type="button" className="su-card" key={pixel.id} onClick={()=>onSelect(pixel)} style={{padding:10,textAlign:'left'}}>{pixel.public_url && pixel.mime_type?.startsWith('image/') ? <img src={pixel.public_url} alt="" style={{width:'100%',aspectRatio:'4/3',objectFit:'cover'}}/> : <div style={{fontSize:32,textAlign:'center'}}>📄</div>}<strong>{pixel.title}</strong></button>)}</div></div></Modal>;
 }
 
@@ -1214,7 +1217,9 @@ function ImageField({ field, value, onChange, entryContext }) {
         />
       )}
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <button type="button" className="su-btn" onClick={() => setPickerOpen(true)}>Choose Pixel</button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" className="su-btn" onClick={() => setPickerOpen(true)}>Choose from Pixels / Media Library</button>
+        </div>
         <input
           type="file"
           accept={acceptAttr}
@@ -1386,7 +1391,7 @@ function FileField({ field, value, onChange, entryContext, accept }) {
     return (
       <div style={{ display: "grid", gap: 6 }}>
         <input placeholder="File name" value={value?.name || ""} readOnly />
-        <button type="button" className="su-btn" onClick={() => setPickerOpen(true)}>Choose Pixel</button>
+        <button type="button" className="su-btn" onClick={() => setPickerOpen(true)}>Choose from Pixels / Media Library</button>
 
         {dragDropDesktop ? (
           <DropzoneButton
@@ -1394,7 +1399,7 @@ function FileField({ field, value, onChange, entryContext, accept }) {
             accept={acceptCombined}
             multiple={false}
             onFiles={handleFiles}
-            label="Click or drag a file here"
+            label="Upload from computer, or drag a file here"
           />
         ) : (
           <input
@@ -1474,7 +1479,7 @@ function FileField({ field, value, onChange, entryContext, accept }) {
             <div style={{ padding: 16, fontSize: 13, opacity: 0.75 }}>No preview available.</div>
           )}
         </Modal>
-        <PixelPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={(pixel) => { onChange({ pixelId: pixel.id, bucket: pixel.bucket, path: pixel.storage_path, publicUrl: pixel.public_url, name: pixel.original_name || pixel.title, title: pixel.title, caption: pixel.caption || '', mime: pixel.mime_type, size: pixel.size_bytes }); setPickerOpen(false); }} />
+        <PixelPicker open={pickerOpen} onClose={() => setPickerOpen(false)} accept={acceptCombined} onSelect={(pixel) => { onChange({ pixelId: pixel.id, bucket: pixel.bucket, path: pixel.storage_path, publicUrl: pixel.public_url, name: pixel.original_name || pixel.title, title: pixel.title, caption: pixel.caption || '', mime: pixel.mime_type, size: pixel.size_bytes }); setPickerOpen(false); }} />
       </div>
     );
   };
@@ -1484,13 +1489,14 @@ function FileField({ field, value, onChange, entryContext, accept }) {
 
     return (
       <div style={{ display: "grid", gap: 10 }}>
+        <button type="button" className="su-btn" onClick={() => setPickerOpen(true)}>Choose from Pixels / Media Library</button>
         {dragDropDesktop ? (
           <DropzoneButton
             disabled={busy}
             accept={acceptCombined}
             multiple={true}
             onFiles={handleFiles}
-            label="Click or drag files here"
+            label="Upload from computer, or drag files here"
           />
         ) : (
           <input
@@ -1590,6 +1596,26 @@ function FileField({ field, value, onChange, entryContext, accept }) {
             <div style={{ padding: 16, fontSize: 13, opacity: 0.75 }}>No preview available.</div>
           )}
         </Modal>
+        <PixelPicker
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          accept={acceptCombined}
+          onSelect={(pixel) => {
+            const selected = {
+              pixelId: pixel.id,
+              bucket: pixel.bucket,
+              path: pixel.storage_path,
+              publicUrl: pixel.public_url,
+              name: pixel.original_name || pixel.title,
+              title: pixel.title,
+              caption: pixel.caption || "",
+              mime: pixel.mime_type,
+              size: pixel.size_bytes,
+            };
+            onChange([...(Array.isArray(value) ? value : []), selected]);
+            setPickerOpen(false);
+          }}
+        />
       </div>
     );
   };
@@ -2647,6 +2673,7 @@ function RelationEntryField({
   onChange,
   relatedCache,
   choicesCache,
+  entryContext,
 }) {
   const cfg = getFieldConfig(field);
 
@@ -2679,6 +2706,8 @@ function RelationEntryField({
   const selectedId = !allowMultiple && value ? String(value) : "";
 
   const [inlineOpen, setInlineOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [pendingSelection, setPendingSelection] = useState("");
 
   // try cache first
   const cached =
@@ -2758,14 +2787,56 @@ function RelationEntryField({
     });
   }
 
+  function relationValue(ent, path) {
+    const keys = String(path || "").split(".").filter(Boolean);
+    let current = keys.length && ent && Object.prototype.hasOwnProperty.call(ent, keys[0]) ? ent : ent?.data;
+    for (const key of keys) current = current?.[key];
+    if (current && typeof current === "object" && !Array.isArray(current)) {
+      const name = [current.title, current.first, current.middle, current.last, current.suffix]
+        .map((part) => String(part || "").trim()).filter(Boolean).join(" ");
+      if (name) return name;
+      return current.label || current.name || current.title || "";
+    }
+    if (Array.isArray(current)) return current.map((item) => String(item || "")).filter(Boolean).join(", ");
+    return current == null ? "" : String(current);
+  }
+
   function labelFor(ent) {
-    return (
-      ent?.data?.title ||
-      ent?.title ||
-      ent?.data?.name ||
-      ent?.name ||
-      ent?.id
-    );
+    const primaryField = cfg.displayField || cfg.display_field || "title";
+    const secondaryField = cfg.secondaryField || cfg.secondary_field || "";
+    const template = String(cfg.labelTemplate || cfg.label_template || "").trim();
+    if (template) {
+      const withOptionalParts = template.replace(/\[([^\]]+)\]/g, (_match, segment) => {
+        const tokens = [...String(segment).matchAll(/\{([^}]+)\}/g)];
+        if (tokens.some((token) => !relationValue(ent, String(token[1]).trim()))) return "";
+        return segment;
+      });
+      const rendered = withOptionalParts.replace(/\{([^}]+)\}/g, (_match, path) => relationValue(ent, String(path).trim()));
+      return rendered.replace(/\s+/g, " ").replace(/\s+([,;:])/g, "$1").replace(/(?:\s[-–—|·]\s*)+$/g, "").trim();
+    }
+    const primary = relationValue(ent, primaryField) || relationValue(ent, "title") || relationValue(ent, "name") || ent?.id;
+    const secondary = secondaryField ? relationValue(ent, secondaryField) : "";
+    return secondary ? `${primary} — ${secondary}` : primary;
+  }
+
+  const configuredSearchFields = String(cfg.searchFields || cfg.search_fields || "")
+    .split(",").map((part) => part.trim()).filter(Boolean);
+  const searchFields = configuredSearchFields.length
+    ? configuredSearchFields
+    : ["title", "slug", cfg.displayField, cfg.secondaryField].filter(Boolean);
+  const filteredItems = items.filter((ent) => {
+    const needle = search.trim().toLocaleLowerCase();
+    if (!needle) return true;
+    return searchFields.some((path) => relationValue(ent, path).toLocaleLowerCase().includes(needle));
+  });
+
+  function openRelated(id) {
+    const destination = `/admin/content/${encodeURIComponent(String(relSlug))}/${encodeURIComponent(String(id))}`;
+    if (typeof entryContext?.saveBeforeNavigate === "function") {
+      entryContext.saveBeforeNavigate(destination);
+      return;
+    }
+    window.location.assign(destination);
   }
 
   if (!relSlug) {
@@ -2779,9 +2850,16 @@ function RelationEntryField({
   if (!allowMultiple) {
     return (
       <div style={{ display: "grid", gap: 6 }}>
-        <select value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
+        <input
+          className="su-input"
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={cfg.searchPlaceholder || "Search related entries…"}
+        />
+        <select className="su-select" value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
           <option value="">— Select related —</option>
-          {items.map((ent) => (
+          {filteredItems.map((ent) => (
             <option key={ent.id} value={String(ent.id)}>
               {labelFor(ent)}
             </option>
@@ -2790,13 +2868,14 @@ function RelationEntryField({
 
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {selectedId && (
-            <a
+            <button
+              type="button"
               className="su-btn"
-              href={`/admin/content/${encodeURIComponent(String(relSlug))}/${encodeURIComponent(selectedId)}`}
+              onClick={() => openRelated(selectedId)}
               style={{ padding: "6px 10px", textDecoration: "none" }}
             >
-              Open selected
-            </a>
+              Open {labelFor(items.find((entry) => String(entry.id) === selectedId) || { id: selectedId })}
+            </button>
           )}
           {(() => {
             const mode = inlineCfg?.mode || "modal"; // "inline" | "modal" | "both"
@@ -2860,41 +2939,46 @@ function RelationEntryField({
     : value
     ? [String(value)]
     : [];
-  const size = Math.min(8, Math.max(3, items.length || 3));
-
   return (
     <div style={{ display: "grid", gap: 6 }}>
+      <input
+        className="su-input"
+        type="search"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder={cfg.searchPlaceholder || "Search related entries…"}
+      />
       <select
-        multiple
-        size={size}
-        value={current}
+        className="su-select"
+        value={pendingSelection}
         onChange={(e) => {
-          const selected = Array.from(e.target.selectedOptions).map(
-            (o) => o.value
-          );
-          onChange(selected);
+          const selected = e.target.value;
+          if (selected && !current.includes(selected)) onChange([...current, selected]);
+          setPendingSelection("");
         }}
-        style={{ minWidth: 260 }}
       >
-        {items.map((ent) => (
+        <option value="">— Add a related entry —</option>
+        {filteredItems.filter((ent) => !current.includes(String(ent.id))).map((ent) => (
           <option key={ent.id} value={String(ent.id)}>
             {labelFor(ent)}
           </option>
         ))}
       </select>
       {!!current.length && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "grid", gap: 8 }}>
           {current.map((id) => {
             const item = items.find((entry) => String(entry.id) === id);
             return (
-              <a
+              <div
                 key={id}
-                className="su-btn"
-                href={`/admin/content/${encodeURIComponent(String(relSlug))}/${encodeURIComponent(id)}`}
-                style={{ padding: "6px 10px", textDecoration: "none" }}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: 10, border: "1px solid var(--su-border)", borderRadius: 10 }}
               >
-                Open {item ? labelFor(item) : "related entry"}
-              </a>
+                <strong style={{ minWidth: 0 }}>{item ? labelFor(item) : id}</strong>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button type="button" className="su-btn" onClick={() => openRelated(id)}>Open</button>
+                  <button type="button" className="su-btn danger" onClick={() => onChange(current.filter((currentId) => currentId !== id))}>Remove</button>
+                </div>
+              </div>
             );
           })}
         </div>
@@ -3204,6 +3288,7 @@ export default function FieldInput({
         onChange={onChange}
         relatedCache={relatedCache}
         choicesCache={choicesCache}
+        entryContext={entryContext}
       />
     );
   }

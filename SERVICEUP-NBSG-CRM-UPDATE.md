@@ -40,3 +40,13 @@ The import is tenant-safe and updates the existing NBSG definitions.
 - Entry Views: create a Related records panel and toggle document drag-and-drop.
 - List Views: toggle horizontal scrolling and set a minimum table width.
 - Relationship fields: enable Two-way relation and choose the inverse field key.
+- Relationship fields: choose primary and secondary display fields, a custom
+  label template, searchable fields, and search placeholder text.
+- Optional template groups can be wrapped in brackets, for example
+  `{title}[ — Partner: {partner_name}]`; the bracketed text disappears when
+  the partner field is empty.
+- Relationship pickers use a search bar plus an add dropdown and show selected
+  records as readable cards.
+- Opening a selected relationship asks to save the current entry first.
+- Document areas provide separate Upload from computer and Choose from Pixels /
+  Media Library actions.
