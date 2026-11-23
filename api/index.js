@@ -596,6 +596,37 @@ function relationshipTargetSlug(config = {}) {
   return typeof raw === 'object' ? raw.slug || raw.content_type || raw.relatedType : raw;
 }
 
+async function createLinkedEntryForRelationship(db, config, sourceEntryId, targetEntryId) {
+  const rule = config?.createLinkedEntry || config?.create_linked_entry;
+  if (!rule || typeof rule !== 'object') return;
+  const contentTypeSlug = String(rule.contentType || rule.content_type || '').trim();
+  const sourceField = String(rule.sourceField || rule.source_field || '').trim();
+  const targetField = String(rule.targetField || rule.target_field || '').trim();
+  if (!/^[a-z0-9-]+$/i.test(contentTypeSlug) || !/^[a-z][\w]*$/i.test(sourceField) || !/^[a-z][\w]*$/i.test(targetField)) return;
+
+  const linkedType = (await db.query('select id from content_types where slug=$1 limit 1', [contentTypeSlug])).rows[0];
+  if (!linkedType) return;
+  const exists = (await db.query(
+    `select id from entries where content_type_id=$1 and data->>$2=$3 and data->>$4=$5 limit 1`,
+    [linkedType.id, sourceField, sourceEntryId, targetField, targetEntryId],
+  )).rows[0];
+  if (exists) return;
+
+  const people = (await db.query('select id,title from entries where id=any($1::uuid[])', [[sourceEntryId, targetEntryId]])).rows;
+  const sourceTitle = people.find((entry) => entry.id === sourceEntryId)?.title || 'Surrogate';
+  const targetTitle = people.find((entry) => entry.id === targetEntryId)?.title || 'Intended Parent';
+  const title = String(rule.titleTemplate || rule.title_template || '{source} + {target}')
+    .replaceAll('{source}', sourceTitle).replaceAll('{target}', targetTitle);
+  const defaults = rule.defaults && typeof rule.defaults === 'object' && !Array.isArray(rule.defaults) ? rule.defaults : {};
+  const data = { ...defaults, [sourceField]: sourceEntryId, [targetField]: targetEntryId };
+  const slugBase = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'match-journey';
+  await db.query(
+    `insert into entries (content_type_id,title,slug,status,data)
+     values ($1,$2,$3,'published',$4::jsonb)`,
+    [linkedType.id, title, `${slugBase}-${Date.now()}`, JSON.stringify(data)],
+  );
+}
+
 async function syncTwoWayRelationships(db, typeId, entryId, previousData = {}, nextData = {}) {
   const definitions = (await db.query(
     `select field_key,config from content_fields
@@ -662,6 +693,12 @@ async function syncTwoWayRelationships(db, typeId, entryId, previousData = {}, n
           [[inverseKey], entryId, targetId, targetType.id]
         );
       }
+    }
+    // Run for every currently linked record, not only newly added IDs. This
+    // safely backfills a missing Match/Journey the next time either record is
+    // saved; the helper is idempotent and will not duplicate an existing case.
+    for (const targetId of newIds) {
+      await createLinkedEntryForRelationship(db, config, entryId, targetId);
     }
   }
 }

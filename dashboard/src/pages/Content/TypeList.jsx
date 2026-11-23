@@ -441,6 +441,22 @@ export default function TypeList() {
   const tableDisplay = activeView?.config?.table || {};
   const horizontalScroll = tableDisplay.horizontal_scroll === true;
   const tableMinWidth = Math.max(600, Number(tableDisplay.min_width || 1200));
+  const columnConfig = useMemo(() => Object.fromEntries(
+    (activeView?.config?.columns || []).map((column) => [column.key, column]),
+  ), [activeView]);
+  const pageTitle = String(
+    activeView?.config?.page_title ||
+    activeViewLabel ||
+    contentType?.plural ||
+    contentType?.name ||
+    contentType?.label ||
+    'Entries',
+  );
+
+  const columnStyle = (key) => {
+    const width = Number(columnConfig[key]?.width || 0);
+    return width >= 80 ? { minWidth: `${width}px`, width: `${width}px` } : undefined;
+  };
 
   // Optional per-view filters. Filters are configured in a list view, so a
   // bookmarked `?view=...` URL and a tenant sidebar link return the same rows.
@@ -729,7 +745,7 @@ export default function TypeList() {
       <div className="su-page-header su-flex su-justify-between su-items-center su-mb-md">
         <div>
           <h1 className="su-page-title">
-            {contentType?.name || contentType?.label || 'Entries'}
+            {pageTitle}
           </h1>
           <p className="su-page-subtitle">Manage entries for this content type.</p>
 
@@ -798,7 +814,7 @@ export default function TypeList() {
                 <thead>
                   <tr>
                     {displayColumns.map((key) => (
-                      <th key={key}>{labelByKey[key] || key}</th>
+                      <th key={key} style={columnStyle(key)}>{labelByKey[key] || key}</th>
                     ))}
                   </tr>
                 </thead>
@@ -812,7 +828,7 @@ export default function TypeList() {
                         onClick={() => handleClickRow(row)}
                       >
                         {displayColumns.map((key) => (
-                          <td key={key}>{renderCell(row, key)}</td>
+                          <td key={key} style={columnStyle(key)}>{renderCell(row, key)}</td>
                         ))}
                       </tr>
                     );

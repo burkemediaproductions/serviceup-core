@@ -698,46 +698,52 @@ function UserRelationField({ field, value, onChange, resolved }) {
 
     return (
       <div style={{ display: "grid", gap: 8 }}>
-        <input
-          type="text"
-          value={q}
-          placeholder="Search users…"
-          onChange={(e) => setQ(e.target.value)}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-        />
+        {normalized && (
+          <div className="su-relation-selected">
+            <strong>{userLabel(selectedUser, display) || selectedUser?.email || normalized}</strong>
+            <button type="button" className="su-btn danger" onClick={() => removeUser(normalized)}>Remove</button>
+          </div>
+        )}
 
-        <select
-          className="su-select"
-          value={normalized || ""}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          onChange={(e) => {
-            const next = e.target.value;
-            if (next === "__clear__") return onChange("");
-            if (!next) return onChange("");
-            selectUser(next);
-          }}
-        >
-          <option value="">— Select a user —</option>
-          {normalized && <option value="__clear__">Clear selection</option>}
-
-          {normalized &&
-            selectedUser &&
-            !results.some((u) => u.id === normalized) && (
-              <option value={normalized}>
-                {userLabel(selectedUser, display) ||
-                  selectedUser.email ||
-                  normalized}
-              </option>
-            )}
-
-          {results.map((u) => (
-            <option key={u.id} value={u.id}>
-              {userLabel(u, display) || u.email || u.id}
-            </option>
-          ))}
-        </select>
+        <div className="su-relation-picker">
+          <button
+            type="button"
+            className="su-select su-relation-picker-trigger"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            onClick={() => { setOpen((current) => !current); setQ(""); }}
+          >
+            <span>{normalized ? "+ Change user" : "+ Select a user"}</span><span aria-hidden="true">⌄</span>
+          </button>
+          {open && (
+            <div className="su-relation-picker-menu" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
+              <input
+                className="su-input"
+                type="search"
+                autoFocus
+                value={q}
+                placeholder="Search users…"
+                onChange={(event) => setQ(event.target.value)}
+              />
+              <div className="su-relation-picker-options" role="listbox">
+                {busy && <div className="su-relation-picker-empty">Searching…</div>}
+                {!busy && err && <div className="su-relation-picker-empty">{err}</div>}
+                {!busy && !err && results.map((user) => (
+                  <button
+                    key={user.id}
+                    type="button"
+                    role="option"
+                    className="su-relation-picker-option"
+                    onClick={() => selectUser(user.id)}
+                  >
+                    {userLabel(user, display) || user.email || user.id}
+                  </button>
+                ))}
+                {!busy && !err && !results.length && <div className="su-relation-picker-empty">No matching users.</div>}
+              </div>
+            </div>
+          )}
+        </div>
 
         <div style={{ fontSize: 11, opacity: 0.7 }}>
           Stores a user ID.

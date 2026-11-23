@@ -71,6 +71,7 @@ export default function ListViewsSettings() {
   const [secondarySortDirection, setSecondarySortDirection] = useState('desc');
   const [horizontalScroll, setHorizontalScroll] = useState(false);
   const [tableMinWidth, setTableMinWidth] = useState(1200);
+  const [pageTitle, setPageTitle] = useState('');
 
   const [availableFields, setAvailableFields] = useState([]);
 
@@ -101,6 +102,7 @@ export default function ListViewsSettings() {
     const display = view?.config?.table || {};
     setHorizontalScroll(display.horizontal_scroll === true);
     setTableMinWidth(Math.max(600, Number(display.min_width || 1200)));
+    setPageTitle(String(view?.config?.page_title || view?.label || ''));
   };
 
   // ---------------------------------------------
@@ -489,6 +491,13 @@ export default function ListViewsSettings() {
     setDirty(true);
   };
 
+  const updateColumnWidth = (fieldKey, width) => {
+    setColumns((current) => current.map((column) => column.key === fieldKey
+      ? { ...column, width: width === '' ? '' : Math.max(80, Number(width || 80)) }
+      : column));
+    setDirty(true);
+  };
+
   const toggleAssignedRole = (roleValue) => {
     const upper = roleValue.toUpperCase();
     // If a non-admin role is being toggled while in admin-only mode, exit admin-only mode
@@ -627,6 +636,7 @@ export default function ListViewsSettings() {
         default_roles: effectiveDefaultRoles,
         config: {
           columns,
+          page_title: pageTitle.trim(),
           title: { label: titleLabel, mode: titleMode, fieldKey: titleFieldKey, template: titleTemplate },
           sort: {
             field: sortField,
@@ -1094,6 +1104,16 @@ export default function ListViewsSettings() {
             <div className="su-card-body">
               <div className="su-grid su-gap-sm">
                 <label className="su-label">
+                  Page heading
+                  <input
+                    className="su-input"
+                    value={pageTitle}
+                    onChange={(event) => { setPageTitle(event.target.value); setDirty(true); }}
+                    placeholder={currentLabel || 'Entries'}
+                  />
+                  <small className="su-text-muted">Shown above this Entry View. Leave blank to use the view label.</small>
+                </label>
+                <label className="su-label">
                   Title label
                   <input
                     className="su-input"
@@ -1280,6 +1300,19 @@ export default function ListViewsSettings() {
                         <code>{c.key}</code>
                       </div>
                     </div>
+                    <label className="su-text-xs" style={{ display: 'grid', gap: 3 }}>
+                      Width
+                      <input
+                        className="su-input"
+                        type="number"
+                        min="80"
+                        step="20"
+                        value={c.width || ''}
+                        onChange={(event) => updateColumnWidth(c.key, event.target.value)}
+                        placeholder="Auto"
+                        style={{ width: 90 }}
+                      />
+                    </label>
                     <div className="su-btn-group">
                       <button
                         type="button"
