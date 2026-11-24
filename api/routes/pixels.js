@@ -13,9 +13,13 @@ router.get('/', async (req, res) => {
   try {
     // Older CRM quick uploads created Document entries and Storage objects but
     // did not register those objects in Pixels. Recover them lazily so existing
-    // tenant files appear in the library without a one-off migration.
-    await req.db.query(
-      `insert into pixels
+    // tenant files appear in the library without a one-off migration. This is
+    // deliberately best-effort: an unusual legacy record must never prevent
+    // the actual Pixels library from loading.
+    await req.db.query('SAVEPOINT pixels_legacy_recovery');
+    try {
+      await req.db.query(
+        `insert into pixels
          (tenant_id, title, original_name, bucket, storage_path, public_url,
           mime_type, size_bytes, uploaded_by, created_at)
        select $1,
@@ -33,9 +37,19 @@ router.get('/', async (req, res) => {
         where ct.slug = 'documents'
           and e.data->'file'->>'bucket' in ('uploads-public', 'uploads-private')
           and e.data->'file'->>'path' like $1::text || '/%'
-       on conflict (tenant_id, bucket, storage_path) do nothing`,
-      [req.tenantId, req.user.id],
-    );
+          and not exists (
+            select 1 from pixels p
+             where p.bucket = e.data->'file'->>'bucket'
+               and p.storage_path = e.data->'file'->>'path'
+          )`,
+        [req.tenantId, req.user.id],
+      );
+      await req.db.query('RELEASE SAVEPOINT pixels_legacy_recovery');
+    } catch (recoveryError) {
+      await req.db.query('ROLLBACK TO SAVEPOINT pixels_legacy_recovery');
+      await req.db.query('RELEASE SAVEPOINT pixels_legacy_recovery');
+      console.warn('[GET /api/pixels] skipped legacy document recovery', recoveryError);
+    }
     const { rows } = await req.db.query(
       `select id, title, original_name, bucket, storage_path, public_url,
               mime_type, size_bytes, alt_text, caption, uploaded_by,
