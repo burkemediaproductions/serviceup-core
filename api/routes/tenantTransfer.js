@@ -9,6 +9,24 @@ const SECTIONS = ['content_types', 'taxonomies', 'menus', 'entries', 'entry_view
 const list = (value) => Array.isArray(value) ? value : [];
 const text = (value) => String(value || '').trim();
 const roleList = (value) => list(value).map((role) => text(role).toUpperCase()).filter(Boolean);
+const ENTRY_REFERENCE_PREFIX = 'serviceup-entry://';
+
+function resolveEntryReferences(value, ids) {
+  if (typeof value === 'string' && value.startsWith(ENTRY_REFERENCE_PREFIX)) {
+    const reference = value.slice(ENTRY_REFERENCE_PREFIX.length);
+    const separator = reference.indexOf('/');
+    if (separator < 1 || separator === reference.length - 1) throw new Error(`Invalid entry reference: ${value}`);
+    const key = `${decodeURIComponent(reference.slice(0, separator))}/${decodeURIComponent(reference.slice(separator + 1))}`;
+    const id = ids.get(key);
+    if (!id) throw new Error(`Referenced entry was not found in this package: ${key}`);
+    return id;
+  }
+  if (Array.isArray(value)) return value.map((item) => resolveEntryReferences(item, ids));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveEntryReferences(item, ids)]));
+  }
+  return value;
+}
 
 function summarize(manifest = {}) {
   return {
@@ -285,12 +303,25 @@ router.post('/import', guard, async (req, res) => {
       );
     }
     if (selected.includes('entries')) {
-      for (const entry of list(manifest.entries)) await db.query(
-        `insert into entries (tenant_id,content_type_id,title,slug,status,data) values ($1,$2,$3,$4,$5,$6::jsonb)
+      const importedEntryIds = new Map();
+      for (const entry of list(manifest.entries)) {
+        const result = await db.query(
+          `insert into entries (tenant_id,content_type_id,title,slug,status,data) values ($1,$2,$3,$4,$5,$6::jsonb)
          on conflict (tenant_id,content_type_id,slug) where slug is not null
-         do update set title=excluded.title,status=excluded.status,data=excluded.data,updated_at=now()`,
-        [req.tenantId, await getTypeId(text(entry.content_type_slug)), text(entry.title), text(entry.slug), text(entry.status) || 'draft', JSON.stringify(entry.data || {})],
-      );
+         do update set title=excluded.title,status=excluded.status,data=excluded.data,updated_at=now()
+         returning id`,
+          [req.tenantId, await getTypeId(text(entry.content_type_slug)), text(entry.title), text(entry.slug), text(entry.status) || 'draft', JSON.stringify(entry.data || {})],
+        );
+        importedEntryIds.set(`${text(entry.content_type_slug)}/${text(entry.slug)}`, result.rows[0].id);
+      }
+      // Resolve portable cross-entry links after every entry has an ID. This
+      // keeps migrations reusable across tenants and databases where UUIDs
+      // necessarily differ.
+      for (const entry of list(manifest.entries)) {
+        const key = `${text(entry.content_type_slug)}/${text(entry.slug)}`;
+        const resolvedData = resolveEntryReferences(entry.data || {}, importedEntryIds);
+        await db.query('update entries set data=$2::jsonb,updated_at=now() where id=$1', [importedEntryIds.get(key), JSON.stringify(resolvedData)]);
+      }
     }
     if (selected.includes('entry_views')) {
       for (const view of list(manifest.entry_views)) {
