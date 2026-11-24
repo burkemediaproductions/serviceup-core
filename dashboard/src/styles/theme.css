@@ -92,6 +92,7 @@ body,
   font-family: var(--su-body-font), system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
     sans-serif;
 }
+html, body, #root { max-width: 100%; overflow-x: hidden; }
 
 h1, h2, h3, h4, h5, h6 { font-family: var(--su-heading-font), var(--su-body-font), system-ui, sans-serif; }
 
@@ -107,7 +108,7 @@ button {
 /* Layout grid: sidebar + topbar + content + footer */
 .su-layout {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 260px minmax(0, 1fr);
   grid-template-rows: 56px 1fr auto;
   grid-template-areas:
     "sidebar topbar"
@@ -177,6 +178,9 @@ button {
 .su-content {
   grid-area: content;
   padding: 20px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .su-footer {
@@ -196,6 +200,8 @@ button {
   border-radius: var(--su-radius);
   box-shadow: var(--su-shadow);
   padding: 16px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .su-card-title {
@@ -316,7 +322,9 @@ button {
 
 /* ServiceUp list-view image cells: never let media expand table rows.
    Applies to every tenant and every image-backed content type. */
-.su-table-wrapper { max-width: 100%; overflow-x: auto; }
+.su-page { min-width: 0; max-width: 100%; }
+.su-table-wrapper { display: block; width: 100%; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+.su-table-actions { width: 110px; min-width: 110px; text-align: center; }
 .su-table .su-table-img-thumb {
   display: block;
   width: 76px;
@@ -848,7 +856,7 @@ button {
 .su-entry-json { grid-column: 1 / -1; }
 .su-entry-mode-bar { grid-column: 1 / -1; display: flex; justify-content: flex-end; position: sticky; top: 76px; z-index: 8; }
 .su-entry-mode-bar .su-btn { box-shadow: 0 8px 22px color-mix(in srgb, var(--su-text) 14%, transparent); }
-.su-code-block { margin: 0; padding: 12px; max-height: 480px; overflow: auto; border-radius: var(--su-radius); background: #0b1120; color: #d1fae5; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.su-code-block { margin: 0; padding: 12px; width: 100%; max-width: 100%; max-height: 480px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: var(--su-radius); background: #0b1120; color: #d1fae5; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 
 .su-brand-logo { display: block; max-width: 100%; object-fit: contain; }
 .su-brand-logo--topbar { width: auto; height: 34px; max-width: 160px; }

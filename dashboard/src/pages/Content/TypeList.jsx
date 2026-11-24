@@ -201,6 +201,7 @@ export default function TypeList() {
   const hideJson = !!settings?.hideJsonByRole?.[roleUpper];
 
   const [rows, setRows] = useState([]);
+  const [deletingId, setDeletingId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [availableKeys, setAvailableKeys] = useState([]);
@@ -441,6 +442,8 @@ export default function TypeList() {
   const tableDisplay = activeView?.config?.table || {};
   const horizontalScroll = tableDisplay.horizontal_scroll === true;
   const tableMinWidth = Math.max(600, Number(tableDisplay.min_width || 1200));
+  const canDeleteEntries = roleUpper === 'ADMIN' || roleUpper === 'EDITOR';
+  const showDebug = !hideJson && searchParams.get('debug') === '1';
   const columnConfig = useMemo(() => Object.fromEntries(
     (activeView?.config?.columns || []).map((column) => [column.key, column]),
   ), [activeView]);
@@ -541,6 +544,25 @@ export default function TypeList() {
       row._id;
     if (!slugOrId) return;
     navigate(`/admin/content/${typeSlug}/${slugOrId}`);
+  }
+
+  async function handleDeleteRow(event, row) {
+    event.preventDefault();
+    event.stopPropagation();
+    const id = row.id || row._id || row.slug;
+    if (!id || deletingId) return;
+    const label = row.title || row.name || row.slug || 'this entry';
+    if (!window.confirm(`Delete “${label}”? This cannot be undone.`)) return;
+    setDeletingId(String(id));
+    setError('');
+    try {
+      await api.del(`/api/content/${encodeURIComponent(typeSlug)}/${encodeURIComponent(String(id))}`);
+      setRows((current) => current.filter((entry) => String(entry.id || entry._id || entry.slug) !== String(id)));
+    } catch (deleteError) {
+      setError(deleteError?.message || 'Failed to delete entry.');
+    } finally {
+      setDeletingId('');
+    }
   }
 
   function handleChooseView(slug) {
@@ -816,6 +838,7 @@ export default function TypeList() {
                     {displayColumns.map((key) => (
                       <th key={key} style={columnStyle(key)}>{labelByKey[key] || key}</th>
                     ))}
+                    {canDeleteEntries && <th className="su-table-actions">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -830,6 +853,18 @@ export default function TypeList() {
                         {displayColumns.map((key) => (
                           <td key={key} style={columnStyle(key)}>{renderCell(row, key)}</td>
                         ))}
+                        {canDeleteEntries && (
+                          <td className="su-table-actions">
+                            <button
+                              type="button"
+                              className="su-btn danger su-btn-xs"
+                              disabled={deletingId === String(id)}
+                              onClick={(event) => handleDeleteRow(event, row)}
+                            >
+                              {deletingId === String(id) ? 'Deleting…' : 'Delete'}
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -840,7 +875,7 @@ export default function TypeList() {
         </div>
       </div>
 
-      {!hideJson && <div className="su-card su-mt-lg">
+      {showDebug && <div className="su-card su-mt-lg">
         <div className="su-card-header">
           <h2 className="su-card-title">Debug</h2>
         </div>

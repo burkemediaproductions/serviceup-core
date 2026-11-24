@@ -218,7 +218,7 @@ test('chrome branding supports edge-to-edge topbar and sidebar appearance', () =
   assert.match(branding, /topbarButtonBg/);
   assert.match(page, /Sidebar CSS gradient/);
   assert.match(page, /Top bar background/);
-  assert.match(css, /grid-template-columns: 260px 1fr/);
+  assert.match(css, /grid-template-columns: 260px minmax\(0, 1fr\)/);
   assert.match(css, /margin: 0/);
 });
 test('Panels provide template-aware page composition without frontend Widgets', () => {
